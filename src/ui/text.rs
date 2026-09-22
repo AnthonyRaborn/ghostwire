@@ -55,17 +55,6 @@ pub fn spark(values: &[f64], width: usize, range: Option<(f64, f64)>) -> String 
         .collect()
 }
 
-/// Exactly `width` points: bucket means for a long series, repeated values for a short
-/// one (so a 24-hour forecast fills a wide chart).
-pub fn fit_series(values: &[f64], width: usize) -> Vec<f64> {
-    if values.is_empty() || values.len() >= width {
-        return resample(values, width);
-    }
-    (0..width)
-        .map(|i| values[i * values.len() / width])
-        .collect()
-}
-
 /// Bucket means, so a long series fits `width` cells without dropping its start.
 fn resample(values: &[f64], width: usize) -> Vec<f64> {
     if values.len() <= width {
@@ -254,13 +243,6 @@ mod tests {
         assert_eq!(line.to_string(), "ab    cd");
         let line = row(vec![Span::raw("abcdef")], vec![Span::raw("gh")], 7);
         assert_eq!(line.to_string(), "abcdef");
-    }
-
-    #[test]
-    fn series_fit_the_width_either_way() {
-        assert_eq!(fit_series(&[1.0, 2.0], 4), [1.0, 1.0, 2.0, 2.0]);
-        assert_eq!(fit_series(&[1.0, 3.0, 5.0, 7.0], 2), [2.0, 6.0]);
-        assert!(fit_series(&[], 3).is_empty());
     }
 
     #[test]

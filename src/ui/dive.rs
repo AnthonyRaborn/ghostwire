@@ -7,13 +7,14 @@ use chrono::{DateTime, Local, Utc};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Paragraph, Sparkline};
+use ratatui::widgets::{Axis, Block, BorderType, Chart, Dataset, GraphType, Paragraph};
 
 use super::nodes::{
     aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
 };
-use super::text::{ago, bar, distance, fit, fit_series, price, row, width_of, wrap};
+use super::text::{ago, bar, distance, fit, price, row, width_of, wrap};
 use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
@@ -89,36 +90,31 @@ fn header_src(text: impl Into<String>, source: &str) -> Line<'static> {
     line
 }
 
-/// A bar chart of `values` across the full width of `area`.
+/// A continuous braille trace of `values` across the full width of `area` — an
+/// oscilloscope read rather than a bar chart, since these are all one signal over time.
 fn chart(frame: &mut Frame, area: Rect, values: &[f64], range: Option<(f64, f64)>, color: Color) {
-    if area.is_empty() || values.is_empty() {
+    if area.is_empty() || values.len() < 2 {
         return;
     }
-    let points = fit_series(values, area.width as usize);
     let (lo, hi) = range.unwrap_or_else(|| {
-        points
+        values
             .iter()
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
                 (lo.min(v), hi.max(v))
             })
     });
-    // Everything gets at least a sliver so the line never has gaps.
-    let scaled: Vec<u64> = points
-        .iter()
-        .map(|&v| {
-            let t = if hi > lo {
-                ((v - lo) / (hi - lo)).clamp(0.0, 1.0)
-            } else {
-                0.5
-            };
-            1 + (t * 99.0).round() as u64
-        })
-        .collect();
+    // A flat series still needs distinct bounds so the trace doesn't divide by zero.
+    let (lo, hi) = if hi > lo { (lo, hi) } else { (lo - 1.0, hi + 1.0) };
+    let points: Vec<(f64, f64)> = values.iter().enumerate().map(|(i, &v)| (i as f64, v)).collect();
+    let dataset = Dataset::default()
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::new().fg(color))
+        .data(&points);
     frame.render_widget(
-        Sparkline::default()
-            .data(scaled.iter().copied())
-            .max(100)
-            .style(Style::new().fg(color)),
+        Chart::new(vec![dataset])
+            .x_axis(Axis::default().bounds([0.0, (values.len() - 1) as f64]))
+            .y_axis(Axis::default().bounds([lo, hi])),
         area,
     );
 }
@@ -319,16 +315,32 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             )],
         ),
         field("FEELS", vec![value(format!("{:.0}{deg}", w.feels_like))]),
-        field("HUMIDITY", vec![value(format!("{:.0}%", w.humidity))]),
         field(
-            "WIND",
-            vec![value(format!(
+            "HUMIDITY",
+            vec![
+                value(format!("{:.0}%{:<7}", w.humidity, "")),
+                Span::styled(bar(w.humidity / 100.0, 20), Style::new().fg(theme::CYAN)),
+            ],
+        ),
+        field("WIND", {
+            let wind_max = match w.units {
+                Units::Metric => 80.0,
+                Units::Imperial => 50.0,
+            };
+            let text = format!(
                 "{:.0} {speed} from {} {}",
                 w.wind_speed,
                 geo::compass(w.wind_from),
                 geo::arrow(w.wind_from + 180.0)
-            ))],
-        ),
+            );
+            vec![
+                value(format!("{text:<22}")),
+                Span::styled(
+                    bar(w.wind_speed / wind_max, 20),
+                    Style::new().fg(theme::CYAN),
+                ),
+            ]
+        }),
         field(
             "PRECIP",
             vec![value(format!("{:.0}% this hour", w.precip_prob))],
@@ -770,20 +782,28 @@ fn solar_detail(frame: &mut Frame, area: Rect, app: &App) {
         return;
     };
     let color = kp_color(s.kp);
-    let [top, _, middle, labels, _, bottom] = Layout::vertical([
+    // A narrow left column for the numbers — the gauge only needs to read at a glance,
+    // not span the whole dive — frees the rest of the width for a taller, full-height
+    // Kp chart on the right (the same meta-column/big-visual split as ATMOS and the
+    // quake radar/list).
+    let [meta, _, chart_col] = Layout::horizontal([
+        Constraint::Length(44),
+        Constraint::Length(2),
+        Constraint::Min(20),
+    ])
+    .areas(area);
+
+    let [top, _, bottom] = Layout::vertical([
         Constraint::Length(5),
         Constraint::Length(1),
         Constraint::Min(4),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(4),
     ])
-    .areas(area);
+    .areas(meta);
 
     let big = bigtext::render(&format!("{:.1}", s.kp));
     let big_width = big[0].chars().count() as u16 + 3;
     let [left, right] =
-        Layout::horizontal([Constraint::Length(big_width), Constraint::Min(20)]).areas(top);
+        Layout::horizontal([Constraint::Length(big_width), Constraint::Min(10)]).areas(top);
     frame.render_widget(
         Paragraph::new(
             big.iter()
@@ -814,27 +834,6 @@ fn solar_detail(frame: &mut Frame, area: Rect, app: &App) {
         right,
     );
 
-    frame.render_widget(
-        Paragraph::new(header("Kp // LAST 72H (3-HOURLY)")),
-        Rect {
-            height: 1,
-            ..middle
-        },
-    );
-    let graph = Rect {
-        y: middle.y + 1,
-        height: middle.height.saturating_sub(1),
-        ..middle
-    };
-    chart(frame, graph, &s.kp_history, Some((0.0, 9.0)), theme::CYAN);
-    frame.render_widget(
-        Paragraph::new(axis(
-            &["-72h", "-48h", "-24h", "now"],
-            labels.width as usize,
-        )),
-        labels,
-    );
-
     let scale = |letter: char, level: u8, name: &str| {
         let fg = match level {
             0 => theme::MUTED,
@@ -862,6 +861,25 @@ fn solar_detail(frame: &mut Frame, area: Rect, app: &App) {
             scale('R', s.scales.r, "radio blackout"),
         ]),
         bottom,
+    );
+
+    let [chart_header, chart_graph, chart_labels] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(3),
+        Constraint::Length(1),
+    ])
+    .areas(chart_col);
+    frame.render_widget(
+        Paragraph::new(header("Kp // LAST 72H (3-HOURLY)")),
+        chart_header,
+    );
+    chart(frame, chart_graph, &s.kp_history, Some((0.0, 9.0)), theme::CYAN);
+    frame.render_widget(
+        Paragraph::new(axis(
+            &["-72h", "-48h", "-24h", "now"],
+            chart_labels.width as usize,
+        )),
+        chart_labels,
     );
 }
 
