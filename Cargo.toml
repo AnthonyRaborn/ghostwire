@@ -2,6 +2,13 @@
 name = "ghostwire"
 version = "1.0.0"
 edition = "2024"
+description = "A terminal dashboard for live public data feeds, styled as a netrunner rig you've jacked into."
+license = "MIT"
+authors = ["Anthony W. Raborn <anthony@raborndecisionsciences.com>"]
+repository = "https://github.com/AnthonyRaborn/ghostwire"
+readme = "README.md"
+keywords = ["terminal", "tui", "dashboard", "weather", "cyberpunk"]
+categories = ["command-line-utilities", "visualization"]
 
 [dependencies]
 anyhow = "1.0.104"

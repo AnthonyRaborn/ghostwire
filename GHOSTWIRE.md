@@ -249,7 +249,7 @@ live beside it in `readings/`.
   scanlines, chaotic sparkle, the dive cycle with six detail views (radar scopes with a
   sweep for SEISMIC and SKYTRAFFIC, block-font readouts, full-width charts), priority
   intercepts, and key controls. Effects hand-rolled (see Architecture).
-- [ ] M5 Polish — 256-color fallback done: colors downsample to the nearest xterm-256
+- [x] M5 Polish — 256-color fallback done: colors downsample to the nearest xterm-256
   index whenever `COLORTERM` isn't `truecolor`/`24bit`, applied as a whole-screen pass
   after every other effect so no widget code needs to know about it; a no-op (single
   branch) on the truecolor path. Small-terminal fallback reviewed: the existing 60×14
@@ -258,8 +258,11 @@ live beside it in `readings/`.
   at the floor, one row/column under it, and a dive at the floor for all five nodes.
   CPU reviewed: the frame-budget/sleep and per-cell-hash snapshot design from M4 already
   keeps idle draws at 1 fps, and the new downsample pass costs nothing on the common
-  truecolor path, so no changes were needed there. **Open:** `cargo install` packaging
-  (Cargo.toml metadata, LICENSE, README).
+  truecolor path, so no changes were needed there. `cargo install` packaging: Cargo.toml
+  metadata (description, license, repository, keywords, categories), an MIT `LICENSE`,
+  and a user-facing `README.md` (this file stays the deep-dive doc). Verified with
+  `cargo publish --dry-run` — packages and compiles clean, though the crate name may
+  already be taken on crates.io, worth checking before an actual publish.
 - [x] Layout — merged SEISMIC and HELIOS into one node: both are low-density feeds (a
   short quake list, a single Kp reading), and the grid was giving HELIOS a full cell for
   four lines of content. `NodeId::Seismic` now carries both `SourceId::Quakes` and
