@@ -19,7 +19,7 @@ use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
-use crate::reading::{LinkHealth, Quake, Quote, Reading, Satellite, Weather, xray_class};
+use crate::reading::{LinkHealth, OutageAlert, Quake, Quote, Reading, Satellite, Weather, xray_class};
 use crate::source::{NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -306,7 +306,19 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         line.extend(spans);
         Line::from(line)
     };
-    let mut lines = vec![
+    let wind_max = match w.units {
+        Units::Metric => 80.0,
+        Units::Imperial => 50.0,
+    };
+    let wind_text = format!(
+        "{:.0} {speed} from {} {}",
+        w.wind_speed,
+        geo::compass(w.wind_from),
+        geo::arrow(w.wind_from + 180.0)
+    );
+    // Fields that always have a value, alongside the two meters that read best next to
+    // the big temp digit.
+    let left_fields = vec![
         field(
             "SKY",
             vec![Span::styled(
@@ -322,33 +334,29 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(bar(w.humidity / 100.0, 20), Style::new().fg(theme::CYAN)),
             ],
         ),
-        field("WIND", {
-            let wind_max = match w.units {
-                Units::Metric => 80.0,
-                Units::Imperial => 50.0,
-            };
-            let text = format!(
-                "{:.0} {speed} from {} {}",
-                w.wind_speed,
-                geo::compass(w.wind_from),
-                geo::arrow(w.wind_from + 180.0)
-            );
+        field(
+            "WIND",
             vec![
-                value(format!("{text:<22}")),
+                value(format!("{wind_text:<22}")),
                 Span::styled(
                     bar(w.wind_speed / wind_max, 20),
                     Style::new().fg(theme::CYAN),
                 ),
-            ]
-        }),
-        field(
-            "PRECIP",
-            vec![value(format!("{:.0}% this hour", w.precip_prob))],
+            ],
         ),
     ];
+    // The rest of the meters — optional ones land here too, so the second column only
+    // appears when there's real content for it.
+    let mut right_fields = vec![field(
+        "PRECIP",
+        vec![
+            value(format!("{:.0}%{:<7}", w.precip_prob, "")),
+            Span::styled(bar(w.precip_prob / 100.0, 20), Style::new().fg(theme::CYAN)),
+        ],
+    )];
     if let Some(aqi) = w.us_aqi {
         let color = aqi_color(aqi);
-        lines.push(field(
+        right_fields.push(field(
             "SMOG",
             vec![
                 Span::styled(
@@ -360,7 +368,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         ));
     }
     if let Some(uv) = w.uv_index {
-        lines.push(field(
+        right_fields.push(field(
             "UV",
             vec![
                 value(format!("{uv:<3.0} {:<10}", lexicon::uv(uv))),
@@ -368,7 +376,22 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             ],
         ));
     }
-    frame.render_widget(Paragraph::new(lines), details);
+    // Two columns once there's room for both meter columns side by side; one stacked
+    // column otherwise, same as before.
+    if details.width >= 80 {
+        let [col_a, _, col_b] = Layout::horizontal([
+            Constraint::Length(44),
+            Constraint::Length(2),
+            Constraint::Min(34),
+        ])
+        .areas(details);
+        frame.render_widget(Paragraph::new(left_fields), col_a);
+        frame.render_widget(Paragraph::new(right_fields), col_b);
+    } else {
+        let mut lines = left_fields;
+        lines.extend(right_fields);
+        frame.render_widget(Paragraph::new(lines), details);
+    }
 
     if w.next_24h.is_empty() {
         return;
@@ -1021,6 +1044,7 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         _ => {}
     }
 
+    let width = right.width as usize;
     let mut lines = vec![header("IODA // COUNTRY OUTAGES"), Line::default()];
     match app.readings.get(&SourceId::Ioda) {
         Some(Reading::Ioda(outages)) => {
@@ -1047,11 +1071,44 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
                     ]));
                 }
             }
+            // A derived read on the country's overall link health — IODA only gives
+            // discrete alert events, not a continuous signal, so this stands in for one:
+            // full when nothing's alerting, docked per active alert.
+            lines.push(Line::default());
+            let integrity = country_integrity(&outages.alerts);
+            let color = integrity_color(integrity);
+            let gauge_width = width.saturating_sub(20).clamp(10, 30);
+            lines.push(Line::from(vec![
+                label("LINK INTEGRITY  "),
+                Span::styled(
+                    format!("{integrity:>3.0}% "),
+                    Style::new().fg(color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(bar(integrity / 100.0, gauge_width), Style::new().fg(color)),
+            ]));
         }
         _ if app.sources.contains_key(&SourceId::Ioda) => lines.push(awaiting(app, SourceId::Ioda)),
         _ => {}
     }
     frame.render_widget(Paragraph::new(lines), right);
+}
+
+/// A rough 0-100 read on the country's link health: full when nothing's alerting,
+/// docked more for a critical alert than a warning.
+fn country_integrity(alerts: &[OutageAlert]) -> f64 {
+    let penalty: f64 = alerts
+        .iter()
+        .map(|a| if a.level == "critical" { 35.0 } else { 15.0 })
+        .sum();
+    (100.0 - penalty).max(0.0)
+}
+
+fn integrity_color(pct: f64) -> Color {
+    match pct {
+        p if p >= 90.0 => theme::GREEN,
+        p if p >= 60.0 => theme::YELLOW,
+        _ => theme::MAGENTA,
+    }
 }
 
 fn uplink_detail(frame: &mut Frame, area: Rect, link: &LinkHealth) {
@@ -1118,5 +1175,20 @@ mod tests {
         assert_eq!(line.find('0'), Some(0));
         assert_eq!(line.find("G1"), Some(10));
         assert_eq!(line.rfind('9'), Some(18));
+    }
+
+    #[test]
+    fn country_integrity_docks_more_for_critical_than_warning() {
+        let alert = |level: &str| OutageAlert {
+            datasource: "bgp".into(),
+            level: level.into(),
+            time: Utc::now(),
+        };
+        assert_eq!(country_integrity(&[]), 100.0);
+        assert_eq!(country_integrity(&[alert("warning")]), 85.0);
+        assert_eq!(country_integrity(&[alert("critical")]), 65.0);
+        // Never goes negative even with a pile of critical alerts.
+        let pile = vec![alert("critical"); 5];
+        assert_eq!(country_integrity(&pile), 0.0);
     }
 }
