@@ -9,7 +9,10 @@ use crate::config::Units;
 pub enum Reading {
     Stocks(Vec<Quote>),
     Crypto(Vec<Quote>),
-    Weather(Weather),
+    // Boxed: Weather carries three hourly series, making it by far the largest
+    // Reading payload — without indirection it drags the whole FeedMsg/Msg event
+    // enum's stack size up with it.
+    Weather(Box<Weather>),
     Hn(Vec<Story>),
     Kev(Vec<Vuln>),
     Quakes(Vec<Quake>),
@@ -49,6 +52,13 @@ pub struct Weather {
     pub uv_index: Option<f64>,
     /// Hourly temperature for the next 24h.
     pub next_24h: Vec<f64>,
+    /// Hourly relative humidity for the next 24h, alongside `next_24h` on the forecast
+    /// chart.
+    pub humidity_24h: Vec<f64>,
+    /// Hourly chance of rain for the next 24h, alongside `next_24h` on the forecast
+    /// chart. `precip_next` below is the same series' first few hours, kept separately
+    /// for the nowcast radar's own detail (amount as well as chance).
+    pub precip_prob_24h: Vec<f64>,
     /// Precipitation probability and amount for each of the next few hours.
     pub precip_next: Vec<PrecipHour>,
 }

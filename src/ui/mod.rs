@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn atmos_drops_the_precip_chart_when_narrow() {
+    fn atmos_drops_the_nowcast_radar_when_narrow() {
         let mut app = demo_app();
         app.dive.dive_now(NodeId::Atmos, Instant::now());
         let screen = render(&app, MIN_W, 34);

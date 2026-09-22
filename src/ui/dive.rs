@@ -9,7 +9,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Axis, Bar, BarChart, Block, BorderType, Chart, Dataset, GraphType, Paragraph};
+use ratatui::widgets::{Axis, Block, BorderType, Chart, Dataset, GraphType, Paragraph};
 
 use super::nodes::{
     aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
@@ -115,6 +115,55 @@ fn chart(frame: &mut Frame, area: Rect, values: &[f64], range: Option<(f64, f64)
         Chart::new(vec![dataset])
             .x_axis(Axis::default().bounds([0.0, (values.len() - 1) as f64]))
             .y_axis(Axis::default().bounds([lo, hi])),
+        area,
+    );
+}
+
+/// Several braille traces sharing one plot, each independently min-max normalized to
+/// the same 0..1 scale — their real units may differ wildly (a temperature and a
+/// percentage), so overlaying their raw values would flatten whichever has the smaller
+/// range. The caller's legend carries the actual ranges; this only needs to keep the
+/// *shapes* comparable.
+fn overlay_chart(frame: &mut Frame, area: Rect, series: &[(&[f64], Color)]) {
+    if area.is_empty() {
+        return;
+    }
+    let normalized: Vec<Vec<(f64, f64)>> = series
+        .iter()
+        .filter(|(values, _)| values.len() >= 2)
+        .map(|(values, _)| {
+            let (lo, hi) = values
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+                    (lo.min(v), hi.max(v))
+                });
+            let (lo, hi) = if hi > lo { (lo, hi) } else { (lo - 1.0, hi + 1.0) };
+            values
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| (i as f64, (v - lo) / (hi - lo)))
+                .collect()
+        })
+        .collect();
+    if normalized.is_empty() {
+        return;
+    }
+    let longest = normalized.iter().map(Vec::len).max().unwrap_or(0);
+    let datasets: Vec<Dataset> = normalized
+        .iter()
+        .zip(series.iter().filter(|(values, _)| values.len() >= 2))
+        .map(|(points, (_, color))| {
+            Dataset::default()
+                .marker(symbols::Marker::Braille)
+                .graph_type(GraphType::Line)
+                .style(Style::new().fg(*color))
+                .data(points)
+        })
+        .collect();
+    frame.render_widget(
+        Chart::new(datasets)
+            .x_axis(Axis::default().bounds([0.0, (longest - 1) as f64]))
+            .y_axis(Axis::default().bounds([0.0, 1.0])),
         area,
     );
 }
@@ -275,8 +324,13 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         Units::Metric => ("°C", "km/h"),
         Units::Imperial => ("°F", "mph"),
     };
+    // The precip nowcast (a compact radar-style scope) sits in the upper right,
+    // alongside the current-conditions fields, once there's width for all three
+    // columns; the forecast chart below always gets the full row regardless.
+    let show_nowcast = area.width >= 100 && !w.precip_next.is_empty();
+    let top_height = if show_nowcast { 13 } else { 9 };
     let [top, _, bottom] = Layout::vertical([
-        Constraint::Length(9),
+        Constraint::Length(top_height),
         Constraint::Length(1),
         Constraint::Min(4),
     ])
@@ -284,8 +338,20 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
 
     let big = bigtext::render(&format!("{:.0}", w.temp));
     let big_width = big[0].chars().count() as u16 + 4;
-    let [left, details] =
-        Layout::horizontal([Constraint::Length(big_width.max(12)), Constraint::Min(20)]).areas(top);
+    let (left, details, nowcast_area) = if show_nowcast {
+        let [left, details, nowcast_area] = Layout::horizontal([
+            Constraint::Length(big_width.max(12)),
+            Constraint::Min(30),
+            Constraint::Length(34),
+        ])
+        .areas(top);
+        (left, details, Some(nowcast_area))
+    } else {
+        let [left, details] =
+            Layout::horizontal([Constraint::Length(big_width.max(12)), Constraint::Min(20)])
+                .areas(top);
+        (left, details, None)
+    };
     let mut big_lines: Vec<Line> = big
         .iter()
         .map(|r| Line::styled(r.clone(), Style::new().fg(theme::CYAN)))
@@ -376,57 +442,67 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             ],
         ));
     }
-    // Two columns once there's room for both meter columns side by side; one stacked
-    // column otherwise, same as before.
-    if details.width >= 80 {
-        let [col_a, _, col_b] = Layout::horizontal([
-            Constraint::Length(44),
-            Constraint::Length(2),
-            Constraint::Min(34),
-        ])
-        .areas(details);
-        frame.render_widget(Paragraph::new(left_fields), col_a);
-        frame.render_widget(Paragraph::new(right_fields), col_b);
-    } else {
-        let mut lines = left_fields;
-        lines.extend(right_fields);
-        frame.render_widget(Paragraph::new(lines), details);
+    let mut lines = left_fields;
+    lines.extend(right_fields);
+    frame.render_widget(Paragraph::new(lines), details);
+
+    if let Some(nowcast_area) = nowcast_area {
+        precip_nowcast(frame, nowcast_area, w);
     }
 
     if w.next_24h.is_empty() {
         return;
     }
-    // The precip bar chart needs its own real estate alongside the temp chart, not a
-    // squeeze — only split the row once there's width for both.
-    let chart_area = if bottom.width >= 90 && !w.precip_next.is_empty() {
-        let [chart_area, _, precip_area] = Layout::horizontal([
-            Constraint::Min(40),
-            Constraint::Length(2),
-            Constraint::Length(34),
-        ])
-        .areas(bottom);
-        precip_nowcast(frame, precip_area, w);
-        chart_area
-    } else {
-        bottom
+    // The forecast chart overlays temp with whatever other hourly series are
+    // available, each independently normalized so their shapes stay comparable
+    // however different their real units are — the legend carries the actual ranges.
+    let minmax = |v: &[f64]| {
+        (
+            v.iter().copied().fold(f64::INFINITY, f64::min),
+            v.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        )
     };
+    let mut series: Vec<(&[f64], Color)> = vec![(&w.next_24h, theme::CYAN)];
+    let (lo_t, hi_t) = minmax(&w.next_24h);
+    let mut legend = vec![Span::styled(
+        format!("TEMP {lo_t:.0}–{hi_t:.0}{deg}"),
+        Style::new().fg(theme::CYAN),
+    )];
+    if !w.humidity_24h.is_empty() {
+        series.push((&w.humidity_24h, theme::GREEN));
+        let (lo_h, hi_h) = minmax(&w.humidity_24h);
+        legend.push(label(" · "));
+        legend.push(Span::styled(
+            format!("HUMIDITY {lo_h:.0}–{hi_h:.0}%"),
+            Style::new().fg(theme::GREEN),
+        ));
+    }
+    if !w.precip_prob_24h.is_empty() {
+        series.push((&w.precip_prob_24h, theme::YELLOW));
+        let (lo_p, hi_p) = minmax(&w.precip_prob_24h);
+        legend.push(label(" · "));
+        legend.push(Span::styled(
+            format!("RAIN {lo_p:.0}–{hi_p:.0}%"),
+            Style::new().fg(theme::YELLOW),
+        ));
+    }
 
-    let lo = w.next_24h.iter().copied().fold(f64::INFINITY, f64::min);
-    let hi = w.next_24h.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let [title, graph, labels] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(1),
         Constraint::Length(1),
     ])
-    .areas(chart_area);
+    .areas(bottom);
+    let mut title_spans = vec![Span::styled(
+        "NEXT 24H // ",
+        Style::new().fg(theme::MAGENTA).add_modifier(Modifier::BOLD),
+    )];
+    title_spans.extend(legend);
     frame.render_widget(
-        Paragraph::new(header_src(
-            format!("NEXT 24H // {lo:.0}–{hi:.0}{deg}"),
-            "open-meteo",
-        )),
+        Paragraph::new(row(title_spans, vec![label("open-meteo")], title.width as usize)),
         title,
     );
-    chart(frame, graph, &w.next_24h, None, theme::CYAN);
+    overlay_chart(frame, graph, &series);
     frame.render_widget(
         Paragraph::new(axis(
             &["now", "+6h", "+12h", "+18h", "+24h"],
@@ -436,14 +512,18 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-/// Hourly chance of rain as a small bar chart. This used to reuse the radar-scope
-/// widget (bearing = wind direction, radius = hour), the same trick as the other
-/// scopes, but with every point sitting on one bearing it read as noise rather than
-/// information — a plain bar per hour, height and color by chance of rain, says the
-/// same thing more clearly.
+/// Precipitation drifting in with the wind: bearing is the direction it's coming from
+/// (the surface wind reading), radius is hours until it arrives. Real hourly data, an
+/// interpretive layout — there's no spatial radar feed behind ATMOS, just a forecast.
 fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
-    let [title, chart_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(4)]).areas(area);
+    // A legend line rather than on-scope labels: every hour sits on the same bearing
+    // (the wind), so labels next to each point would stack on top of one another.
+    let [title, legend, scope] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(6),
+    ])
+    .areas(area);
     frame.render_widget(
         Paragraph::new(header_src(
             format!("PRECIP NOWCAST // NEXT {}H", w.precip_next.len()),
@@ -451,38 +531,51 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
         )),
         title,
     );
-
-    if w.precip_next.iter().all(|p| p.prob < 10.0) {
-        frame.render_widget(
-            Paragraph::new(Line::styled(
-                "nothing incoming",
-                Style::new().fg(theme::MUTED),
-            )),
-            chart_area,
-        );
-        return;
+    let mut legend_spans = Vec::new();
+    for (i, p) in w.precip_next.iter().enumerate() {
+        if i > 0 {
+            legend_spans.push(label(" · "));
+        }
+        legend_spans.push(Span::styled(
+            format!("+{}h {:.0}%", i + 1, p.prob),
+            Style::new().fg(precip_color(p.prob)),
+        ));
     }
+    frame.render_widget(Paragraph::new(Line::from(legend_spans)), legend);
 
-    let bars: Vec<Bar> = w
+    let hours = w.precip_next.len() as f64;
+    let blips: Vec<radar::Blip> = w
         .precip_next
         .iter()
         .enumerate()
-        .map(|(i, p)| {
-            let color = precip_color(p.prob);
-            Bar::with_label(format!("+{}h", i + 1), p.prob.round() as u64)
-                .style(Style::new().fg(color))
-                .value_style(Style::new().fg(color).add_modifier(Modifier::BOLD))
-                .text_value(format!("{:.0}%", p.prob))
+        .map(|(i, p)| radar::Blip {
+            r: i as f64 + 1.0,
+            bearing: w.wind_from,
+            glyph: precip_glyph(p.mm).into(),
+            color: precip_color(p.prob),
+            label: None,
         })
         .collect();
-    frame.render_widget(
-        BarChart::new(bars)
-            .max(100)
-            .bar_width(5)
-            .bar_gap(2)
-            .label_style(Style::new().fg(theme::MUTED)),
-        chart_area,
+    let clear = w.precip_next.iter().all(|p| p.prob < 10.0);
+    let note = clear.then_some("NOTHING INCOMING");
+    radar::draw(
+        frame,
+        scope,
+        hours,
+        &blips,
+        sweep(),
+        &format!("+{hours:.0}h"),
+        note,
     );
+}
+
+fn precip_glyph(mm: f64) -> char {
+    match mm {
+        m if m < 0.1 => '·',
+        m if m < 0.5 => '•',
+        m if m < 2.0 => '●',
+        _ => '◉',
+    }
 }
 
 fn precip_color(prob: f64) -> Color {

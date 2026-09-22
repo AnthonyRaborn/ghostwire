@@ -156,9 +156,11 @@ impl DemoFeed {
                 Reading::Crypto(quotes(prev, &self.coins, true, rng))
             }
             (SourceId::Weather, Some(Reading::Weather(w))) => {
-                Reading::Weather(weather(w.clone(), rng))
+                Reading::Weather(Box::new(weather(Weather::clone(w), rng)))
             }
-            (SourceId::Weather, _) => Reading::Weather(weather(seed_weather(self.units), rng)),
+            (SourceId::Weather, _) => {
+                Reading::Weather(Box::new(weather(seed_weather(self.units), rng)))
+            }
             (SourceId::Hn, Some(Reading::Hn(s))) => Reading::Hn(hn(s.clone(), rng)),
             (SourceId::Hn, _) => Reading::Hn(hn(Vec::new(), rng)),
             (SourceId::Kev, Some(Reading::Kev(v))) => Reading::Kev(kev(v.clone(), rng)),
@@ -328,6 +330,12 @@ fn seed_weather(units: Units) -> Weather {
         next_24h: (0..24)
             .map(|h| temp + swing * (f64::from(h) / 24.0 * TAU).sin())
             .collect(),
+        humidity_24h: (0..24)
+            .map(|h| 64.0 - 18.0 * (f64::from(h) / 24.0 * TAU).sin())
+            .collect(),
+        precip_prob_24h: (0..24)
+            .map(|h| (20.0 + 15.0 * (f64::from(h) / 24.0 * TAU).cos()).clamp(0.0, 100.0))
+            .collect(),
         precip_next: (1..=4)
             .map(|h| PrecipHour {
                 prob: (20.0 + f64::from(h) * 12.0).min(90.0),
@@ -350,6 +358,8 @@ fn weather(mut w: Weather, rng: &mut Rng) -> Weather {
     w.us_aqi = w.us_aqi.map(|a| (a + jitter(rng) * 4.0).clamp(5.0, 220.0));
     w.uv_index = w.uv_index.map(|u| (u + jitter(rng) * 0.3).clamp(0.0, 11.0));
     w.next_24h.rotate_left(1);
+    w.humidity_24h.rotate_left(1);
+    w.precip_prob_24h.rotate_left(1);
     for hour in &mut w.precip_next {
         hour.prob = (hour.prob + jitter(rng) * 5.0).clamp(0.0, 100.0);
         hour.mm = (hour.mm + jitter(rng) * 0.1).max(0.0);

@@ -49,7 +49,7 @@ impl Feed for OpenMeteo {
             "https://api.open-meteo.com/v1/forecast?latitude={lat:.4}&longitude={lon:.4}\
              &current=temperature_2m,apparent_temperature,relative_humidity_2m,\
              wind_speed_10m,wind_direction_10m,weather_code,is_day\
-             &hourly=temperature_2m,precipitation_probability,precipitation\
+             &hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation\
              &forecast_hours=24{units}"
         );
         let air_url = format!(
@@ -66,7 +66,7 @@ impl Feed for OpenMeteo {
             .inspect_err(|e| tracing::warn!("air quality unavailable: {e:?}"))
             .ok();
         parse(&forecast, air.as_deref(), self.units)
-            .map(Reading::Weather)
+            .map(|w| Reading::Weather(Box::new(w)))
             .map_err(FetchError::Failed)
     }
 }
@@ -91,6 +91,7 @@ struct Current {
 #[derive(Deserialize)]
 struct Hourly {
     temperature_2m: Vec<Option<f64>>,
+    relative_humidity_2m: Vec<Option<f64>>,
     precipitation_probability: Vec<Option<f64>>,
     precipitation: Vec<Option<f64>>,
 }
@@ -114,6 +115,13 @@ pub fn parse(forecast: &str, air: Option<&str>, units: Units) -> Result<Weather,
             .ok()
             .map(|a| a.current)
     });
+    // Borrowed before `precip_next` below consumes the same series by value.
+    let precip_prob_24h: Vec<f64> = hourly
+        .precipitation_probability
+        .iter()
+        .copied()
+        .flatten()
+        .collect();
     Ok(Weather {
         units,
         temp: c.temperature_2m,
@@ -133,6 +141,8 @@ pub fn parse(forecast: &str, air: Option<&str>, units: Units) -> Result<Weather,
         us_aqi: air.as_ref().and_then(|a| a.us_aqi),
         uv_index: air.as_ref().and_then(|a| a.uv_index),
         next_24h: hourly.temperature_2m.into_iter().flatten().collect(),
+        humidity_24h: hourly.relative_humidity_2m.into_iter().flatten().collect(),
+        precip_prob_24h,
         // Skip index 0 (the current hour, already in `precip_prob`).
         precip_next: hourly
             .precipitation_probability
@@ -169,6 +179,9 @@ mod tests {
         assert_eq!(w.uv_index, Some(0.0));
         assert_eq!(w.precip_next.len(), PRECIP_HOURS);
         assert_eq!(w.precip_next[0].prob, 0.0);
+        assert_eq!(w.humidity_24h.len(), 24);
+        assert_eq!(w.humidity_24h[0], 90.0);
+        assert_eq!(w.precip_prob_24h.len(), 24);
     }
 
     #[test]
