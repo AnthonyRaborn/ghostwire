@@ -29,27 +29,28 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | | Crypto prices + 7d sparkline | CoinGecko `/coins/markets` | None (free demo key optional) | 2m |
 | ATMOS // SECTOR | Temp, rain, wind, AQI, UV | Open-Meteo forecast + air-quality | None | 10m |
 | INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS | HN Firebase API, CISA KEV JSON | None | 5m / 1h |
-| SEISMIC | Quakes near you + big ones worldwide | USGS GeoJSON feeds | None | 2m |
-| HELIOS | Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | NOAA SWPC JSON | None | 10m |
+| SEISMIC // HELIOS | Quakes near you + big ones worldwide; Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | USGS GeoJSON feeds; NOAA SWPC JSON | None | 2m; 10m |
 | SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km) | OpenSky Network | None (400 credits/day anonymous; ≤25 sq° costs 1) | 5m |
 
 A node can be fed by more than one source (ZAIBATSU = stocks + crypto, INTERCEPTS =
-HN + KEV + RSS). Link status is tracked per source; the node shows the best of its
-sources, and the footer ticker reports any source that's in trouble.
+HN + KEV + RSS, SEISMIC // HELIOS = quakes + space weather — both low-density feeds
+sharing a slot). Link status is tracked per source; the node shows the best of its
+sources, and the footer ticker reports any source that's in trouble. The grid has one
+open cell as a result — nothing lives there yet.
 
 ## Screen (hybrid layout)
 
 ```
- GHOSTWIRE // RIG-07 ░ uplink 5/6 ░ neural load 3% ░ 21:14:07 NET
+ GHOSTWIRE // RIG-07 ░ uplink 5/5 ░ neural load 3% ░ 21:14:07 NET
 ┌ ZAIBATSU INDEX ────────┐┌ ATMOS//SECTOR-4 ───────┐┌ INTERCEPTS ────────────┐
 │ NVDA   182.40 ▲2.1% ▅▆▇││ 17°C  RAIN 20%  WIND 9 ││ ▓ HN  Show HN: a tiny… │
 │ BTC    61,204 ▼0.8% ▇▆▅││ SMOG AQI 42 ░░▒  UV 3  ││ ▓ KEV CVE-2026-41822   │
 └────────────────────────┘└────────────────────────┘└────────────────────────┘
-┌ SEISMIC ───────────────┐┌ HELIOS ────────────────┐┌ SKYTRAFFIC ────────────┐
-│ M2.1  38km NE   4m ago ││ Kp 3 ▂▃▃▅  STORM: NONE ││ 7 contacts overhead    │
-│ M4.6  Tonga    19m ago ││ !! ICE // retry 30s    ││ UAL1234  FL340  ↗ 452kt│
-└────────────────────────┘└────────────────────────┘└────────────────────────┘
- » diving SKYTRAFFIC in 12s ░ HELIOS: ICE, retry 30s ░ 2 ghosts cached
+┌ SEISMIC // HELIOS ─────┐┌ SKYTRAFFIC ────────────┐
+│ M2.1  38km NE   4m ago ││ 7 contacts overhead    │
+│ Kp 3 ▂▃▃▅  G0 S0 R0    ││ UAL1234  FL340  ↗ 452kt│
+└────────────────────────┘└────────────────────────┘
+ » diving SKYTRAFFIC in 12s ░ NOAA-SWPC: ICE, retry 30s ░ 2 ghosts cached
 ```
 
 Every 45s the rig **dives** into one node: it takes over the grid for 15s with detail
@@ -79,7 +80,7 @@ compared with the previous catalog.
 
 | Key | Grid | Dive |
 |---|---|---|
-| `1`–`6` | dive into that node (the number is in its title) | switch to that node |
+| `1`–`5` | dive into that node (the number is in its title) | switch to that node |
 | `space` | dive into the next node now | surface |
 | `p` | hold the dive cycle (freezes timers) | hold / release |
 | `esc` | jack out | surface |
@@ -243,8 +244,18 @@ live beside it in `readings/`.
   branch) on the truecolor path. Small-terminal fallback reviewed: the existing 60×14
   floor and 2/3-column grid switch already degrade cleanly (`row()` drops the right-hand
   text rather than overflow, ratatui clips rather than panicking); added boundary tests
-  at the floor, one row/column under it, and a dive at the floor for all six nodes.
+  at the floor, one row/column under it, and a dive at the floor for all five nodes.
   CPU reviewed: the frame-budget/sleep and per-cell-hash snapshot design from M4 already
   keeps idle draws at 1 fps, and the new downsample pass costs nothing on the common
   truecolor path, so no changes were needed there. **Open:** `cargo install` packaging
   (Cargo.toml metadata, LICENSE, README).
+- [x] Layout — merged SEISMIC and HELIOS into one node: both are low-density feeds (a
+  short quake list, a single Kp reading), and the grid was giving HELIOS a full cell for
+  four lines of content. `NodeId::Seismic` now carries both `SourceId::Quakes` and
+  `SourceId::Swpc`, the same multi-source pattern ZAIBATSU and INTERCEPTS already used.
+  Grid tile: up to 4 quake lines, then a one-line space-weather summary (Kp, a 72h trend
+  spark, G/S/R). Dive: quakes get the radar scope and full list on top (they need the
+  room more), space weather gets a fixed-height strip underneath with its full detail
+  (big Kp digit, gauge, 72h chart, X-ray, scales) — sized so the big digit doesn't get
+  clipped. The grid now has one open cell (5 nodes in a 3×2/2×3 layout) for whatever
+  comes next.

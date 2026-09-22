@@ -14,7 +14,7 @@ use super::text::{ago, bar, distance, fit, price, row, spark, spinner, width_of}
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::{self, Fx};
-use crate::reading::{Quote, Reading, xray_class};
+use crate::reading::{Quake, Quote, Reading, SpaceWeather};
 use crate::source::{Link, NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -107,7 +107,6 @@ fn body(app: &App, node: NodeId, width: usize, now: DateTime<Utc>) -> Vec<Line<'
         NodeId::Atmos => atmos(app, width),
         NodeId::Intercepts => intercepts(app, width, now),
         NodeId::Seismic => seismic(app, width, now),
-        NodeId::Helios => helios(app, width),
         NodeId::Sky => sky(app, width),
     }
 }
@@ -296,14 +295,41 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
     lines
 }
 
+/// Quakes get top billing (they're the more variable of the two); space weather is a
+/// single summary line pinned to the bottom.
+const MAX_QUAKE_LINES: usize = 4;
+
 fn seismic(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
-    let Some(Reading::Quakes(quakes)) = app.readings.get(&SourceId::Quakes) else {
-        return Vec::new();
-    };
+    let mut lines = Vec::new();
+    if app.sources.contains_key(&SourceId::Quakes) {
+        match app.readings.get(&SourceId::Quakes) {
+            Some(Reading::Quakes(quakes)) => {
+                lines.extend(quake_lines(app, quakes, width, now, MAX_QUAKE_LINES));
+            }
+            _ => lines.push(awaiting(app, SourceId::Quakes)),
+        }
+    }
+    if app.sources.contains_key(&SourceId::Swpc) {
+        match app.readings.get(&SourceId::Swpc) {
+            Some(Reading::Swpc(s)) => lines.push(solar_line(s, width)),
+            _ => lines.push(awaiting(app, SourceId::Swpc)),
+        }
+    }
+    lines
+}
+
+fn quake_lines(
+    app: &App,
+    quakes: &[Quake],
+    width: usize,
+    now: DateTime<Utc>,
+    max: usize,
+) -> Vec<Line<'static>> {
     let radius = app.config.sector.radius_km;
     let units = app.config.sector.units;
     quakes
         .iter()
+        .take(max)
         .map(|q| {
             let near = q.distance_km.is_some_and(|d| d <= radius);
             let place = match (near, q.distance_km, q.bearing) {
@@ -332,6 +358,35 @@ fn seismic(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
         .collect()
 }
 
+/// One compact line: Kp, its trend, and the three NOAA scales.
+fn solar_line(s: &SpaceWeather, width: usize) -> Line<'static> {
+    let color = kp_color(s.kp);
+    let head = format!("Kp {:.1} ", s.kp);
+    let scale = |letter: char, level: u8| {
+        let fg = match level {
+            0 => theme::MUTED,
+            1 | 2 => theme::YELLOW,
+            _ => theme::MAGENTA,
+        };
+        Span::styled(format!(" {letter}{level}"), style(fg))
+    };
+    let tail = [
+        scale('G', s.scales.g),
+        scale('S', s.scales.s),
+        scale('R', s.scales.r),
+    ];
+    let spark_width = width.saturating_sub(head.width() + width_of(&tail));
+    let mut spans = vec![Span::styled(head, style(color))];
+    if spark_width >= 4 {
+        spans.push(Span::styled(
+            spark(&s.kp_history, spark_width, Some((0.0, 9.0))),
+            style(color),
+        ));
+    }
+    spans.extend(tail);
+    Line::from(spans)
+}
+
 pub(super) fn mag_color(mag: f64) -> Color {
     match mag {
         m if m < 2.5 => theme::MUTED,
@@ -339,46 +394,6 @@ pub(super) fn mag_color(mag: f64) -> Color {
         m if m < 6.0 => theme::YELLOW,
         _ => theme::MAGENTA,
     }
-}
-
-fn helios(app: &App, width: usize) -> Vec<Line<'static>> {
-    let Some(Reading::Swpc(s)) = app.readings.get(&SourceId::Swpc) else {
-        return Vec::new();
-    };
-    let color = kp_color(s.kp);
-    let scale = |letter: char, level: u8| {
-        let fg = match level {
-            0 => theme::MUTED,
-            1 | 2 => theme::YELLOW,
-            _ => theme::MAGENTA,
-        };
-        Span::styled(format!("{letter}{level} "), style(fg))
-    };
-    vec![
-        Line::from(vec![
-            label("Kp "),
-            Span::styled(format!("{:.1} {} ", s.kp, lexicon::kp(s.kp)), style(color)),
-            Span::styled(bar(s.kp / 9.0, 9), style(color)),
-        ]),
-        Line::from(vec![
-            // NOAA publishes Kp every 3 hours, so 24 readings span three days.
-            label("72H "),
-            Span::styled(
-                spark(&s.kp_history, width.saturating_sub(4), Some((0.0, 9.0))),
-                style(theme::CYAN),
-            ),
-        ]),
-        Line::from(vec![
-            label("X-RAY "),
-            value(s.xray_flux.map_or_else(|| "—".to_string(), xray_class)),
-        ]),
-        Line::from(vec![
-            scale('G', s.scales.g),
-            scale('S', s.scales.s),
-            scale('R', s.scales.r),
-            label("// NOAA SCALES"),
-        ]),
-    ]
 }
 
 fn sky(app: &App, width: usize) -> Vec<Line<'static>> {

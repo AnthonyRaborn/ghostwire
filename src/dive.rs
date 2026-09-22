@@ -261,11 +261,11 @@ mod tests {
         let t0 = Instant::now();
         let mut cycle = DiveCycle::new(EVERY, HOLD, t0);
         cycle.dive_now(NodeId::Atmos, t0);
-        cycle.prioritize(NodeId::Helios, t0);
+        cycle.prioritize(NodeId::Sky, t0);
         assert_eq!(cycle.tick(t0 + HOLD, all), Some(Change::Surfaced));
         assert_eq!(cycle.next_in(t0 + HOLD), Some(PRIORITY_LEAD));
         let soon = t0 + HOLD + PRIORITY_LEAD;
-        assert_eq!(cycle.tick(soon, all), Some(Change::Dived(NodeId::Helios)));
+        assert_eq!(cycle.tick(soon, all), Some(Change::Dived(NodeId::Sky)));
     }
 
     #[test]

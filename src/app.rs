@@ -139,9 +139,12 @@ impl App {
                 self.push_change(change);
             }
             KeyCode::Char('p') => self.dive.toggle_hold(now),
-            KeyCode::Char(c @ '1'..='6') => {
-                let node = NodeId::ALL[c as usize - '1' as usize];
-                if self.node_ready(node) && self.dive.diving() != Some(node) {
+            KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
+                let idx = c as usize - '1' as usize;
+                if let Some(&node) = NodeId::ALL.get(idx)
+                    && self.node_ready(node)
+                    && self.dive.diving() != Some(node)
+                {
                     let change = self.dive.dive_now(node, now);
                     self.push_change(Some(change));
                 }
@@ -381,7 +384,7 @@ mod tests {
         let mut app = app(&[SourceId::Swpc]);
         let fail = || Err(FetchError::Failed("reset".into()));
         app.handle(done(SourceId::Swpc, fail(), 1));
-        assert_eq!(app.take_signals(), [Signal::Trouble(NodeId::Helios)]);
+        assert_eq!(app.take_signals(), [Signal::Trouble(NodeId::Seismic)]);
         app.handle(done(SourceId::Swpc, fail(), 2));
         assert!(app.take_signals().is_empty());
         app.handle(done(SourceId::Swpc, fail(), 3));

@@ -58,7 +58,6 @@ pub fn draw(
         NodeId::Atmos => atmos(frame, body, app),
         NodeId::Intercepts => intercepts(frame, body, app, now),
         NodeId::Seismic => seismic(frame, body, app, now),
-        NodeId::Helios => helios(frame, body, app),
         NodeId::Sky => sky(frame, body, app),
     }
     let decay = app.node_decay(node, now);
@@ -461,7 +460,34 @@ fn sweep() -> f64 {
     radar::sweep_at(Utc::now().timestamp_millis())
 }
 
+/// Both feeds are low-density enough to share a dive: quakes get the bulk of the
+/// height (a radar scope needs room), space weather gets a compact strip below.
 fn seismic(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+    let has_quakes = app.readings.contains_key(&SourceId::Quakes);
+    let has_solar = app.readings.contains_key(&SourceId::Swpc);
+    if has_quakes && has_solar {
+        // Space weather's big Kp digit and chart need a fixed floor to stay legible;
+        // quakes get whatever's left (a radar scope degrades gracefully when squeezed).
+        let [quakes_area, header_area, solar_area] = Layout::vertical([
+            Constraint::Min(10),
+            Constraint::Length(1),
+            Constraint::Length(16),
+        ])
+        .areas(area);
+        quakes_detail(frame, quakes_area, app, now);
+        frame.render_widget(
+            Paragraph::new(header("SPACE WEATHER // NOAA SWPC")),
+            header_area,
+        );
+        solar_detail(frame, solar_area, app);
+    } else if has_quakes {
+        quakes_detail(frame, area, app, now);
+    } else if has_solar {
+        solar_detail(frame, area, app);
+    }
+}
+
+fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     let Some(Reading::Quakes(quakes)) = app.readings.get(&SourceId::Quakes) else {
         return;
     };
@@ -561,7 +587,7 @@ fn blip_color(mag: f64) -> Color {
     }
 }
 
-fn helios(frame: &mut Frame, area: Rect, app: &App) {
+fn solar_detail(frame: &mut Frame, area: Rect, app: &App) {
     let Some(Reading::Swpc(s)) = app.readings.get(&SourceId::Swpc) else {
         return;
     };

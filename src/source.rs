@@ -10,18 +10,17 @@ pub enum NodeId {
     Zaibatsu,
     Atmos,
     Intercepts,
+    /// Quakes and space weather: both are low-density feeds, so they share a node.
     Seismic,
-    Helios,
     Sky,
 }
 
 impl NodeId {
-    pub const ALL: [NodeId; 6] = [
+    pub const ALL: [NodeId; 5] = [
         NodeId::Zaibatsu,
         NodeId::Atmos,
         NodeId::Intercepts,
         NodeId::Seismic,
-        NodeId::Helios,
         NodeId::Sky,
     ];
 
@@ -30,8 +29,7 @@ impl NodeId {
             NodeId::Zaibatsu => &[SourceId::Stocks, SourceId::Crypto],
             NodeId::Atmos => &[SourceId::Weather],
             NodeId::Intercepts => &[SourceId::Kev, SourceId::Hn],
-            NodeId::Seismic => &[SourceId::Quakes],
-            NodeId::Helios => &[SourceId::Swpc],
+            NodeId::Seismic => &[SourceId::Quakes, SourceId::Swpc],
             NodeId::Sky => &[SourceId::OpenSky],
         }
     }

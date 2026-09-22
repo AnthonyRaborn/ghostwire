@@ -267,20 +267,24 @@ mod tests {
     #[test]
     fn every_node_dives() {
         let expected = [
-            (NodeId::Zaibatsu, "CRYPTO // 7 DAYS"),
-            (NodeId::Atmos, "NEXT 24H //"),
-            (NodeId::Intercepts, "HACKER NEWS // FRONT PAGE"),
-            (NodeId::Seismic, "EVENTS // NEARBY 7 DAYS"),
-            (NodeId::Helios, "Kp // LAST 72H"),
-            (NodeId::Sky, "CONTACTS //"),
+            (NodeId::Zaibatsu, vec!["CRYPTO // 7 DAYS"]),
+            (NodeId::Atmos, vec!["NEXT 24H //"]),
+            (NodeId::Intercepts, vec!["HACKER NEWS // FRONT PAGE"]),
+            (
+                NodeId::Seismic,
+                vec!["EVENTS // NEARBY 7 DAYS", "Kp // LAST 72H"],
+            ),
+            (NodeId::Sky, vec!["CONTACTS //"]),
         ];
-        for (node, marker) in expected {
+        for (node, markers) in expected {
             let mut app = demo_app();
             app.dive.dive_now(node, Instant::now());
             let screen = render(&app, 132, 34);
             println!("{screen}\n");
             assert!(screen.contains("◢ DIVE //"), "{node:?}");
-            assert!(screen.contains(marker), "{node:?} missing {marker:?}");
+            for marker in markers {
+                assert!(screen.contains(marker), "{node:?} missing {marker:?}");
+            }
             assert!(screen.contains("[esc] surface"), "{node:?}");
         }
     }
