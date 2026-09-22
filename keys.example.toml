@@ -1,0 +1,8 @@
+# GHOSTWIRE API keys. They live apart from config.toml so that file can be shared
+# freely. Keep this one private (chmod 600). An environment variable overrides each key.
+
+# Free key from finnhub.io. Stock quotes stay OFFLINE without it. (FINNHUB_API_KEY)
+# finnhub = ""
+
+# Optional CoinGecko demo key; raises the crypto rate limit. (COINGECKO_API_KEY)
+# coingecko = ""

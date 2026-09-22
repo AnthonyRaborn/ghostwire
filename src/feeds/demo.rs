@@ -78,6 +78,7 @@ pub struct DemoFeed {
     coins: Vec<String>,
     units: Units,
     radius_km: f64,
+    flight_radius_km: f64,
     last: Mutex<Option<Reading>>,
 }
 
@@ -90,6 +91,7 @@ impl DemoFeed {
             coins: config.zaibatsu.coins.clone(),
             units: config.sector.units,
             radius_km: config.sector.radius_km,
+            flight_radius_km: config.sector.flight_radius_km,
             last: Mutex::new(None),
         }
     }
@@ -125,9 +127,9 @@ impl DemoFeed {
             (SourceId::Swpc, Some(Reading::Swpc(s))) => Reading::Swpc(swpc(s.clone(), rng)),
             (SourceId::Swpc, _) => Reading::Swpc(swpc(seed_swpc(), rng)),
             (SourceId::OpenSky, Some(Reading::OpenSky(c))) => {
-                Reading::OpenSky(sky(c.clone(), self.radius_km, rng))
+                Reading::OpenSky(sky(c.clone(), self.flight_radius_km, rng))
             }
-            (SourceId::OpenSky, _) => Reading::OpenSky(sky(Vec::new(), self.radius_km, rng)),
+            (SourceId::OpenSky, _) => Reading::OpenSky(sky(Vec::new(), self.flight_radius_km, rng)),
         }
     }
 }
@@ -330,7 +332,7 @@ fn new_story(
 }
 
 fn kev(mut vulns: Vec<Vuln>, rng: &mut Rng) -> Vec<Vuln> {
-    let today = Utc::now().date_naive();
+    let today = chrono::Local::now().date_naive();
     if vulns.is_empty() {
         vulns = (0..4)
             .map(|i| {

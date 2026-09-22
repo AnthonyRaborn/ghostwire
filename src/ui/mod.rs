@@ -169,13 +169,16 @@ mod tests {
         assert!(screen.contains("NO UPLINK"));
     }
 
-    /// Hits the real Open-Meteo and USGS APIs: `cargo test live -- --ignored --nocapture`.
+    /// Hits every real API once (one OpenSky credit):
+    /// `cargo test live -- --ignored --nocapture`. Stocks stay OFFLINE unless
+    /// a Finnhub key is in keys.toml or FINNHUB_API_KEY.
     #[tokio::test]
     #[ignore = "network"]
     async fn live_feeds_render() {
         use crate::feeds::Feed;
-        use crate::feeds::open_meteo::OpenMeteo;
-        use crate::feeds::usgs::Usgs;
+        use crate::feeds::{coingecko, finnhub, hn, kev, open_meteo, opensky, swpc, usgs};
+        use crate::keys::{self, Keys};
+        use crate::source::Link;
 
         let config =
             Config::parse("[sector]\nname = \"TEST\"\nlat = 37.77\nlon = -122.42").unwrap();
@@ -183,16 +186,52 @@ mod tests {
             .user_agent("ghostwire-test")
             .build()
             .unwrap();
-        let weather = OpenMeteo::new(&config).fetch(&http).await;
-        let quakes = Usgs::new(&config).fetch(&http).await;
+        // Real keys from the usual place, if any, so a configured rig tests its stocks too.
+        let keys_path = keys::path_beside(&crate::paths::config_path().unwrap());
+        let (keys, _) = Keys::load(&keys_path).unwrap();
+        let has_finnhub = keys.finnhub().is_some();
+        let (stocks, crypto, weather, sky, quakes) = (
+            finnhub::Finnhub::new(&config, keys.finnhub(), None),
+            coingecko::CoinGecko::new(&config, keys.coingecko()),
+            open_meteo::OpenMeteo::new(&config),
+            opensky::OpenSky::new(&config),
+            usgs::Usgs::new(&config),
+        );
+        let (stocks, crypto, weather, news, vulns, quakes, space, sky) = tokio::join!(
+            stocks.fetch(&http),
+            crypto.fetch(&http),
+            weather.fetch(&http),
+            hn::HackerNews.fetch(&http),
+            kev::Kev.fetch(&http),
+            quakes.fetch(&http),
+            swpc::Swpc.fetch(&http),
+            sky.fetch(&http),
+        );
         let mut app = app_with(vec![
+            (SourceId::Stocks, stocks),
+            (SourceId::Crypto, crypto),
             (SourceId::Weather, weather),
+            (SourceId::Hn, news),
+            (SourceId::Kev, vulns),
             (SourceId::Quakes, quakes),
+            (SourceId::Swpc, space),
+            (SourceId::OpenSky, sky),
         ]);
         app.config = config;
-        let screen = render(&app, 132, 30);
+        let screen = render(&app, 132, 34);
         println!("{screen}");
-        assert_eq!(app.uplink(), (2, 2), "{screen}");
+        for (id, state) in &app.sources {
+            let expected_offline = *id == SourceId::Stocks && !has_finnhub;
+            if expected_offline {
+                assert!(
+                    matches!(state.link, Link::Offline(_)),
+                    "{id:?}: {:?}",
+                    state.link
+                );
+            } else {
+                assert_eq!(state.link, Link::Live, "{id:?}: {:?}", state.last_error);
+            }
+        }
     }
 
     #[test]

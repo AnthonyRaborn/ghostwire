@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
-use super::text::{ago, bar, fit, price, row, spark, spinner, width_of};
+use super::text::{ago, bar, distance, fit, price, row, spark, spinner, width_of};
 use crate::app::App;
 use crate::config::Units;
 use crate::reading::{Quote, Reading, xray_class};
@@ -230,7 +230,9 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
         match app.readings.get(&SourceId::Kev) {
             Some(Reading::Kev(vulns)) => {
                 for v in vulns.iter().take(3) {
-                    let days = (now.date_naive() - v.added).num_days();
+                    // CISA dates entries by US calendar day, so compare local dates.
+                    let days =
+                        (now.with_timezone(&chrono::Local).date_naive() - v.added).num_days();
                     let mut right = Vec::new();
                     if v.ransomware {
                         right.push(Span::styled("RANSOM ", style(theme::RED)));
@@ -270,12 +272,15 @@ fn seismic(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
         return Vec::new();
     };
     let radius = app.config.sector.radius_km;
+    let units = app.config.sector.units;
     quakes
         .iter()
         .map(|q| {
             let near = q.distance_km.is_some_and(|d| d <= radius);
             let place = match (near, q.distance_km, q.bearing) {
-                (true, Some(d), Some(b)) => format!("{d:.0}km {} · {}", geo::compass(b), q.place),
+                (true, Some(d), Some(b)) => {
+                    format!("{} {} · {}", distance(d, units), geo::compass(b), q.place)
+                }
                 _ => q.place.clone(),
             };
             let mut mag_style = style(mag_color(q.mag));
@@ -334,7 +339,8 @@ fn helios(app: &App, width: usize) -> Vec<Line<'static>> {
             Span::styled(bar(s.kp / 9.0, 9), style(kp_color)),
         ]),
         Line::from(vec![
-            label("24H "),
+            // NOAA publishes Kp every 3 hours, so 24 readings span three days.
+            label("72H "),
             Span::styled(
                 spark(&s.kp_history, width.saturating_sub(4), Some((0.0, 9.0))),
                 style(theme::CYAN),
@@ -357,17 +363,22 @@ fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
     let Some(Reading::OpenSky(contacts)) = app.readings.get(&SourceId::OpenSky) else {
         return Vec::new();
     };
+    let units = app.config.sector.units;
     let mut lines = vec![Line::from(vec![
         Span::styled(
             format!("{} CONTACTS", contacts.len()),
             Style::new().fg(theme::TEXT).add_modifier(Modifier::BOLD),
         ),
-        label(format!(" // {:.0}km", app.config.sector.radius_km)),
+        label(format!(
+            " // {}",
+            distance(app.config.sector.flight_radius_km, units)
+        )),
     ])];
     for c in contacts {
-        let flight_level = c
-            .altitude_m
-            .map_or_else(|| "FL---".to_string(), |m| format!("FL{:03.0}", m / 30.48));
+        let flight_level = c.altitude_m.map_or_else(
+            || "FL---".to_string(),
+            |m| format!("FL{:03.0}", (m / 30.48).max(0.0)),
+        );
         let knots = c.speed_ms.map_or_else(
             || "  -kt".to_string(),
             |v| format!("{:>3.0}kt", v * 1.943_84),
@@ -377,7 +388,11 @@ fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
             "{:<8} {flight_level} {heading} {knots}",
             fit(&c.callsign, 8)
         );
-        let right = format!("{:.0}km {}", c.distance_km, geo::compass(c.bearing));
+        let right = format!(
+            "{} {}",
+            distance(c.distance_km, units),
+            geo::compass(c.bearing)
+        );
         lines.push(row(vec![value(left)], vec![label(right)], width));
     }
     lines

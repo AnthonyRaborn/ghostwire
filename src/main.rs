@@ -6,6 +6,7 @@ mod event;
 mod feeds;
 mod fx;
 mod geo;
+mod keys;
 mod lexicon;
 mod paths;
 mod reading;
@@ -17,7 +18,7 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
 use ratatui::DefaultTerminal;
 use tokio::sync::{broadcast, mpsc};
@@ -26,6 +27,7 @@ use tracing_subscriber::EnvFilter;
 use app::App;
 use config::{Config, FxLevel};
 use event::Msg;
+use keys::Keys;
 
 /// Keep one previous log once the current one passes this size.
 const LOG_ROTATE_BYTES: u64 = 5_000_000;
@@ -70,16 +72,35 @@ async fn main() -> Result<()> {
         config.fx.level = fx;
     }
     tracing::info!(config = %config_path.display(), config_found, demo = cli.demo, "jacking in");
+    let keys_path = keys::path_beside(&config_path);
+    let (keys, keys_exposed) = Keys::load(&keys_path)?;
+    if keys_exposed {
+        tracing::warn!(
+            "{} is readable by other users; chmod 600 it",
+            keys_path.display()
+        );
+    }
 
     let http = reqwest::Client::builder()
         .user_agent(concat!("ghostwire/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (rebreach, _) = broadcast::channel(4);
-    let started = feeds::spawn_all(&config, cli.demo, &http, &tx, &rebreach);
-    event::spawn_input(tx);
     let cache = if cli.demo { None } else { open_cache() };
+    let started = feeds::spawn_all(
+        &config,
+        &keys,
+        cli.demo,
+        &http,
+        &tx,
+        &rebreach,
+        cache.as_ref(),
+    );
+    event::spawn_input(tx);
     let mut app = App::new(config, config_found, cli.demo, started, rebreach, cache);
+    if keys_exposed {
+        app.warnings.push(lexicon::KEYS_EXPOSED.into());
+    }
 
     let mut terminal = ratatui::init();
     let _ = crossterm::execute!(
@@ -124,16 +145,22 @@ fn open_cache() -> Option<cache::Cache> {
         .ok()
 }
 
-fn init_config(path: &Path) -> Result<()> {
-    if path.exists() {
-        bail!("{} already exists; not overwriting it", path.display());
+/// Writes whichever of config.toml and keys.toml don't exist yet; never overwrites.
+fn init_config(config_path: &Path) -> Result<()> {
+    let keys_path = keys::path_beside(config_path);
+    let files = [
+        (config_path, config::EXAMPLE, false),
+        (keys_path.as_path(), keys::EXAMPLE, true),
+    ];
+    for (path, contents, private) in files {
+        if path.exists() {
+            println!("kept existing {}", path.display());
+        } else {
+            paths::write_new(path, contents, private)?;
+            println!("wrote {}", path.display());
+        }
     }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
-    }
-    std::fs::write(path, config::EXAMPLE).with_context(|| format!("writing {}", path.display()))?;
-    println!("wrote {}", path.display());
-    println!("set [sector] lat/lon, and FINNHUB_API_KEY for stock quotes.");
+    println!("next: set [sector] lat/lon in config.toml, and your Finnhub key in keys.toml.");
     Ok(())
 }
 

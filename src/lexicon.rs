@@ -9,6 +9,8 @@ pub const KEYS: &str = "[r] re-breach  [q] jack out";
 pub const NOMINAL: &str = "» all links nominal";
 pub const NOT_WIRED: &str = "NO UPLINK // node not wired yet";
 pub const NO_CONFIG: &str = "NO CONFIG // run ghostwire --init-config";
+pub const NO_FINNHUB_KEY: &str = "no key: add finnhub to keys.toml";
+pub const KEYS_EXPOSED: &str = "KEYS EXPOSED // chmod 600 keys.toml";
 
 pub fn node_title(node: NodeId, sector: &str) -> String {
     match node {

@@ -22,6 +22,9 @@ pub struct Sector {
     pub lat: Option<f64>,
     pub lon: Option<f64>,
     pub radius_km: f64,
+    /// SKYTRAFFIC's own, smaller radius. OpenSky's anonymous quota is 400 credits a day,
+    /// and an area over 25 square degrees costs 2 credits a call instead of 1.
+    pub flight_radius_km: f64,
     pub units: Units,
 }
 
@@ -32,6 +35,7 @@ impl Default for Sector {
             lat: None,
             lon: None,
             radius_km: 300.0,
+            flight_radius_km: 150.0,
             units: Units::Metric,
         }
     }
@@ -139,8 +143,8 @@ impl Config {
         {
             bail!("[sector] lon {lon} is outside -180..180");
         }
-        if s.radius_km <= 0.0 {
-            bail!("[sector] radius_km must be positive");
+        if s.radius_km <= 0.0 || s.flight_radius_km <= 0.0 {
+            bail!("[sector] radius_km and flight_radius_km must be positive");
         }
         if self.fx.breach_hold >= self.fx.breach_every {
             bail!("[fx] breach_hold must be shorter than breach_every");

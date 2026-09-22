@@ -1,9 +1,15 @@
 //! Each source runs as its own tokio task on its own interval, reporting to the app
 //! loop over the shared message channel. The UI never waits on the network.
 
+pub mod coingecko;
 pub mod demo;
+pub mod finnhub;
+pub mod hn;
 mod http;
+pub mod kev;
 pub mod open_meteo;
+pub mod opensky;
+pub mod swpc;
 pub mod usgs;
 
 use std::future::Future;
@@ -12,8 +18,10 @@ use std::time::Duration;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::cache::Cache;
 use crate::config::Config;
 use crate::event::Msg;
+use crate::keys::Keys;
 use crate::reading::Reading;
 use crate::source::SourceId;
 
@@ -66,10 +74,12 @@ pub enum FeedMsg {
 /// refresh interval.
 pub fn spawn_all(
     config: &Config,
+    keys: &Keys,
     demo: bool,
     http: &reqwest::Client,
     tx: &UnboundedSender<Msg>,
     rebreach: &broadcast::Sender<()>,
+    cache: Option<&Cache>,
 ) -> Vec<(SourceId, Duration)> {
     let mut launcher = Launcher {
         http,
@@ -86,15 +96,23 @@ pub fn spawn_all(
             continue;
         }
         match source {
+            SourceId::Stocks => {
+                let cached = cache.and_then(|c| c.load(SourceId::Stocks)).map(|(_, r)| r);
+                launcher.launch(finnhub::Finnhub::new(
+                    config,
+                    keys.finnhub(),
+                    cached.as_ref(),
+                ));
+            }
+            SourceId::Crypto => {
+                launcher.launch(coingecko::CoinGecko::new(config, keys.coingecko()));
+            }
             SourceId::Weather => launcher.launch(open_meteo::OpenMeteo::new(config)),
+            SourceId::Hn => launcher.launch(hn::HackerNews),
+            SourceId::Kev => launcher.launch(kev::Kev),
             SourceId::Quakes => launcher.launch(usgs::Usgs::new(config)),
-            // Wired in M3.
-            SourceId::Stocks
-            | SourceId::Crypto
-            | SourceId::Hn
-            | SourceId::Kev
-            | SourceId::Swpc
-            | SourceId::OpenSky => {}
+            SourceId::Swpc => launcher.launch(swpc::Swpc),
+            SourceId::OpenSky => launcher.launch(opensky::OpenSky::new(config)),
         }
     }
     launcher.started

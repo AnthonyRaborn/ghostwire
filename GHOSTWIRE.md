@@ -17,7 +17,7 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | Usage | Ambient display on a spare monitor |
 | Stack | Rust + Ratatui |
 | Layout | Hybrid: full grid, with a periodic full-screen breach of one node |
-| API keys | Free keys OK (Finnhub for stocks only; everything else keyless) |
+| API keys | Free keys OK (Finnhub for stocks only; everything else keyless), kept in `keys.toml` |
 | Location | Set in the config file; nothing auto-detected |
 | FX level | Active by default (`calm` / `active` / `chaotic` selectable) |
 
@@ -30,8 +30,8 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | ATMOS // SECTOR | Temp, rain, wind, AQI, UV | Open-Meteo forecast + air-quality | None | 10m |
 | INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS | HN Firebase API, CISA KEV JSON | None | 5m / 1h |
 | SEISMIC | Quakes near you + big ones worldwide | USGS GeoJSON feeds | None | 2m |
-| HELIOS | Kp index, X-ray flux, NOAA G/S/R scales | NOAA SWPC JSON | None | 10m |
-| SKYTRAFFIC | Aircraft within your radius | OpenSky Network | None (anonymous daily quota is tight) | 5m |
+| HELIOS | Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | NOAA SWPC JSON | None | 10m |
+| SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km) | OpenSky Network | None (400 credits/day anonymous; ≤25 sq° costs 1) | 5m |
 
 A node can be fed by more than one source (ZAIBATSU = stocks + crypto, INTERCEPTS =
 HN + KEV + RSS). Link status is tracked per source; the node shows the best of its
@@ -106,18 +106,20 @@ src/
 ## Config
 
 `~/.config/ghostwire/config.toml` (or `$XDG_CONFIG_HOME/ghostwire/config.toml`).
-`ghostwire --init-config` writes a commented example.
+`ghostwire --init-config` writes commented examples of it and `keys.toml`, skipping
+whichever already exists.
 
 ```toml
 [sector]
 name = "SECTOR-4"
 lat = 0.0            # your coordinates — required for ATMOS, SEISMIC radius, SKYTRAFFIC
 lon = 0.0
-radius_km = 300      # range for nearby quakes and flights
+radius_km = 300      # range for nearby quakes
+flight_radius_km = 150  # SKYTRAFFIC range; keeps OpenSky at 1 credit per call
 units = "metric"     # or "imperial"
 
 [zaibatsu]
-stocks = ["NVDA", "TSM", "MSFT"]   # Finnhub key from the FINNHUB_API_KEY env var
+stocks = ["NVDA", "TSM", "MSFT"]   # needs a Finnhub key in keys.toml
 coins  = ["bitcoin", "ethereum"]   # CoinGecko ids
 
 [intercepts]
@@ -128,6 +130,19 @@ level = "active"     # calm | active | chaotic
 breach_every = "45s"
 breach_hold  = "15s"
 ```
+
+API keys live in `keys.toml` beside the config, never in `config.toml`, so the config
+can be shared or committed to dotfiles safely:
+
+```toml
+# ~/.config/ghostwire/keys.toml — created owner-only (chmod 600)
+finnhub = "..."      # overridden by FINNHUB_API_KEY
+coingecko = "..."    # optional; overridden by COINGECKO_API_KEY
+```
+
+The ticker shows `KEYS EXPOSED` if the file is readable by other users. Keys are held
+in a `Secret` type whose `Debug` output is redacted, are sent only as request headers,
+and never reach the log or the reading cache.
 
 ## Milestones
 
@@ -166,6 +181,15 @@ live beside it in `readings/`.
   link model including GHOST from the disk cache and signal-decay fading. Parsers tested
   against real fixtures in `tests/fixtures/`. Nodes whose sources aren't built yet show
   `NO UPLINK // node not wired yet` outside construct mode.
-- [ ] M3 Remaining feeds
+- [x] M3 Remaining feeds — CoinGecko (7-day sparkline, config order), Finnhub (key sent
+  as a header; 401/403 → OFFLINE; 1-minute polls only during NYSE hours, DST-aware;
+  sparkline built from successive quotes and seeded from the cache), Hacker News
+  (Firebase ranking + 10 stories), CISA KEV (newest 8, hourly), NOAA SWPC (Kp series
+  required; 1-min Kp, X-ray, scales optional), OpenSky (own radius to stay in the
+  1-credit tier; honors its retry header). All keyless feeds verified live. Finnhub's
+  rejected-key path is verified live (dummy key → 401 → OFFLINE); a successful quote is
+  tested against its documented response shape only, pending a real key.
+  API keys moved to `keys.toml` (see Config).
+  **Open:** RSS/Atom for INTERCEPTS isn't wired (the config key is accepted and ignored).
 - [ ] M4 Diegetic layer
 - [ ] M5 Polish

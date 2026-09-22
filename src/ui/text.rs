@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use ratatui::text::{Line, Span};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use crate::config::Units;
+
 const TICKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -28,17 +30,20 @@ pub fn fit(s: &str, max: usize) -> String {
     out
 }
 
-/// A sparkline of the last `width` values. With `range`, values are placed on that
-/// fixed scale; otherwise the scale stretches to the values shown.
+/// A sparkline of the whole series, averaged down to at most `width` cells. With
+/// `range`, values are placed on that fixed scale; otherwise the scale stretches to the
+/// values shown.
 pub fn spark(values: &[f64], width: usize, range: Option<(f64, f64)>) -> String {
-    let tail = &values[values.len().saturating_sub(width)..];
+    let points = resample(values, width);
     let (lo, hi) = range.unwrap_or_else(|| {
-        tail.iter()
+        points
+            .iter()
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
                 (lo.min(v), hi.max(v))
             })
     });
-    tail.iter()
+    points
+        .iter()
         .map(|&v| {
             let t = if hi > lo {
                 ((v - lo) / (hi - lo)).clamp(0.0, 1.0)
@@ -50,10 +55,31 @@ pub fn spark(values: &[f64], width: usize, range: Option<(f64, f64)>) -> String 
         .collect()
 }
 
+/// Bucket means, so a long series fits `width` cells without dropping its start.
+fn resample(values: &[f64], width: usize) -> Vec<f64> {
+    if values.len() <= width {
+        return values.to_vec();
+    }
+    (0..width)
+        .map(|i| {
+            let bucket = &values[i * values.len() / width..(i + 1) * values.len() / width];
+            bucket.iter().sum::<f64>() / bucket.len() as f64
+        })
+        .collect()
+}
+
 /// A filled/empty bar `width` cells wide.
 pub fn bar(frac: f64, width: usize) -> String {
     let filled = (frac.clamp(0.0, 1.0) * width as f64).round() as usize;
     format!("{}{}", "█".repeat(filled), "░".repeat(width - filled))
+}
+
+/// Distance in the configured units: `38km` or `24mi`.
+pub fn distance(km: f64, units: Units) -> String {
+    match units {
+        Units::Metric => format!("{km:.0}km"),
+        Units::Imperial => format!("{:.0}mi", km * 0.621_371),
+    }
 }
 
 /// Compact age: `42s`, `7m`, `3h`, `2d`.
@@ -138,6 +164,9 @@ mod tests {
         assert_eq!(spark(&[5.0, 5.0], 5, None), "▅▅");
         assert_eq!(spark(&[0.0, 9.0], 5, Some((0.0, 9.0))), "▁█");
         assert_eq!(spark(&[], 5, None), "");
+        // A long series keeps its shape: rising then falling, squeezed to 4 cells.
+        let series: Vec<f64> = (0..100).chain((0..100).rev()).map(f64::from).collect();
+        assert_eq!(spark(&series, 4, None), "▁██▁");
     }
 
     #[test]
@@ -166,6 +195,12 @@ mod tests {
         assert_eq!(line.to_string(), "ab    cd");
         let line = row(vec![Span::raw("abcdef")], vec![Span::raw("gh")], 7);
         assert_eq!(line.to_string(), "abcdef");
+    }
+
+    #[test]
+    fn distances() {
+        assert_eq!(distance(38.4, Units::Metric), "38km");
+        assert_eq!(distance(100.0, Units::Imperial), "62mi");
     }
 
     #[test]

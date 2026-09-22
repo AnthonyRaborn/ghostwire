@@ -25,6 +25,8 @@ pub struct App {
     pub readings: HashMap<SourceId, Reading>,
     pub cpu: CpuMeter,
     pub should_quit: bool,
+    /// Standing problems found at startup, shown in the ticker until fixed.
+    pub warnings: Vec<String>,
     rebreach: broadcast::Sender<()>,
     /// `None` in construct mode, so simulated data never lands on disk.
     cache: Option<Cache>,
@@ -58,6 +60,7 @@ impl App {
             readings,
             cpu: CpuMeter::new(),
             should_quit: false,
+            warnings: Vec::new(),
             rebreach,
             cache,
         }

@@ -66,6 +66,12 @@ pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
             Style::new().fg(theme::YELLOW),
         ));
     }
+    for warning in &app.warnings {
+        items.push(Span::styled(
+            warning.clone(),
+            Style::new().fg(theme::YELLOW),
+        ));
+    }
     for (id, state) in &app.sources {
         let retry = if state.in_flight {
             None

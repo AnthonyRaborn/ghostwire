@@ -1,22 +1,25 @@
 # GHOSTWIRE config. Every field is optional; anything left out uses the default.
+# API keys don't go here; they go in keys.toml, so this file is safe to share.
 
 [sector]
 name = "SECTOR-4"
 # Your coordinates. ATMOS, the SEISMIC radius, and SKYTRAFFIC stay offline until set.
 # lat = 37.77
 # lon = -122.42
-radius_km = 300      # range for nearby quakes and flights
+radius_km = 300      # range for nearby quakes
+flight_radius_km = 150  # range for SKYTRAFFIC; bigger areas burn OpenSky's daily quota faster
 units = "metric"     # or "imperial"
 
 [zaibatsu]
-# Stock quotes need a free Finnhub key in the FINNHUB_API_KEY environment variable.
+# Stock quotes need a free Finnhub key in keys.toml (next to this file).
 # An empty list turns the source off.
 stocks = ["NVDA", "TSM", "MSFT"]
-# CoinGecko coin ids (not ticker symbols).
+# CoinGecko coin ids (not ticker symbols). A free demo key in keys.toml is optional
+# and raises the rate limit.
 coins = ["bitcoin", "ethereum", "solana"]
 
 [intercepts]
-rss = []
+rss = []             # RSS/Atom feed URLs — not wired yet
 
 [fx]
 level = "active"     # calm | active | chaotic

@@ -1,1 +1,5 @@
 /target
+
+# Local configs; keys.toml holds API keys.
+/config.toml
+/keys.toml
