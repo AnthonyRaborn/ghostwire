@@ -239,7 +239,7 @@ fn atmos(app: &App, width: usize) -> Vec<Line<'static>> {
         lines.push(Line::default());
         lines.push(Line::from(vec![
             label(head),
-            Span::styled(spark(&w.next_24h, spark_width, None), style(theme::CYAN)),
+            Span::styled(spark(&w.next_24h, spark_width, None), style(theme::YELLOW)),
             label(range),
         ]));
     }
