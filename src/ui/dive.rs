@@ -418,7 +418,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             "HUMIDITY",
             vec![
                 value(format!("{:.0}%{:<7}", w.humidity, "")),
-                Span::styled(bar(w.humidity / 100.0, 20), Style::new().fg(theme::CYAN)),
+                Span::styled(bar(w.humidity / 100.0, 20), Style::new().fg(theme::GREEN)),
             ],
         ),
         field(
@@ -438,7 +438,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         "PRECIP",
         vec![
             value(format!("{:.0}%{:<7}", w.precip_prob, "")),
-            Span::styled(bar(w.precip_prob / 100.0, 20), Style::new().fg(theme::CYAN)),
+            Span::styled(bar(w.precip_prob / 100.0, 20), Style::new().fg(theme::BLUE)),
         ],
     )];
     if let Some(aqi) = w.us_aqi {

@@ -201,10 +201,15 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
                 );
             }
             if let Some(note) = empty_note {
-                let x = -(note.chars().count() as f64) / f64::from(scope.width.max(1)) * r;
+                // Centered on the axis column itself, so it reads as balanced
+                // around the rig marker rather than around the scope's box.
+                let (center, _) = grid.cell(0.0, 0.0);
+                let (_, row) = grid.cell(0.0, -r * 0.25);
+                let half = (note.chars().count() / 2) as u16;
+                let (x, y) = grid.label_at(center.saturating_sub(half), row);
                 ctx.print(
                     x,
-                    -r * 0.25,
+                    y,
                     Span::styled(note.to_string(), Style::new().fg(theme::MUTED)),
                 );
             }

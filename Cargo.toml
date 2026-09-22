@@ -2,6 +2,7 @@
 name = "ghostwire-tui"
 version = "1.0.0"
 edition = "2024"
+rust-version = "1.88"
 description = "A terminal dashboard for live public data feeds, styled as a netrunner rig you've jacked into."
 license = "MIT"
 authors = ["Anthony W. Raborn <anthony@raborndecisionsciences.com>"]
