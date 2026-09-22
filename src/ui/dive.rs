@@ -483,11 +483,11 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             v.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         )
     };
-    let mut series: Vec<(&[f64], Color)> = vec![(&w.next_24h, theme::CYAN)];
+    let mut series: Vec<(&[f64], Color)> = vec![(&w.next_24h, theme::YELLOW)];
     let (lo_t, hi_t) = minmax(&w.next_24h);
     let mut legend = vec![Span::styled(
         format!("TEMP {lo_t:.0}–{hi_t:.0}{deg}"),
-        Style::new().fg(theme::CYAN),
+        Style::new().fg(theme::YELLOW),
     )];
     if !w.humidity_24h.is_empty() {
         series.push((&w.humidity_24h, theme::GREEN));
@@ -499,12 +499,12 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         ));
     }
     if !w.precip_prob_24h.is_empty() {
-        series.push((&w.precip_prob_24h, theme::YELLOW));
+        series.push((&w.precip_prob_24h, theme::BLUE));
         let (lo_p, hi_p) = minmax(&w.precip_prob_24h);
         legend.push(label(" · "));
         legend.push(Span::styled(
             format!("RAIN {lo_p:.0}–{hi_p:.0}%"),
-            Style::new().fg(theme::YELLOW),
+            Style::new().fg(theme::BLUE),
         ));
     }
 

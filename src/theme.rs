@@ -9,6 +9,7 @@ pub const DIM: Color = Color::Rgb(40, 46, 70);
 pub const CYAN: Color = Color::Rgb(0, 240, 255);
 pub const BORDER: Color = Color::Rgb(0, 140, 160);
 pub const MAGENTA: Color = Color::Rgb(255, 42, 109);
+pub const BLUE: Color = Color::Rgb(60, 130, 255);
 pub const YELLOW: Color = Color::Rgb(245, 211, 0);
 pub const ORANGE: Color = Color::Rgb(255, 140, 0);
 pub const GREEN: Color = Color::Rgb(5, 255, 161);

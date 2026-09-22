@@ -59,6 +59,53 @@ fn scope_area(area: Rect) -> Rect {
     }
 }
 
+/// Maps canvas coordinates to the cell the braille layer puts them in, and back to a
+/// label position that lands in that same cell. The two layers disagree otherwise:
+/// ratatui rounds braille dots to the nearest sub-cell but truncates label positions on
+/// a coarser grid, which left every glyph up to a cell up and to the left of the rings
+/// and axes it belongs on.
+#[derive(Clone, Copy)]
+struct Grid {
+    r: f64,
+    cols: u16,
+    rows: u16,
+}
+
+impl Grid {
+    /// The cell the braille layer draws canvas point `(x, y)` in.
+    fn cell(&self, x: f64, y: f64) -> (u16, u16) {
+        let span = 2.0 * self.r;
+        let dot_x = ((x + self.r) * (f64::from(self.cols) * 2.0 - 1.0) / span).round();
+        let dot_y = ((self.r - y) * (f64::from(self.rows) * 4.0 - 1.0) / span).round();
+        (
+            (dot_x as u16 / 2).min(self.cols - 1),
+            (dot_y as u16 / 4).min(self.rows - 1),
+        )
+    }
+
+    /// A canvas point whose label ratatui places at cell `(col, row)`.
+    fn label_at(&self, col: u16, row: u16) -> (f64, f64) {
+        let span = 2.0 * self.r;
+        let axis = |i: u16, n: u16| {
+            if n <= 1 {
+                0.0
+            } else {
+                ((f64::from(i) + 0.5) * span / f64::from(n - 1)).min(span)
+            }
+        };
+        (
+            -self.r + axis(col.min(self.cols - 1), self.cols),
+            self.r - axis(row.min(self.rows - 1), self.rows),
+        )
+    }
+
+    /// Where to print a glyph so it sits on canvas point `(x, y)`, shifted `dx` cells right.
+    fn snap(&self, x: f64, y: f64, dx: u16) -> (f64, f64) {
+        let (col, row) = self.cell(x, y);
+        self.label_at(col.saturating_add(dx), row)
+    }
+}
+
 /// Everything a scope shows besides its position on screen.
 #[derive(Clone, Copy)]
 pub struct Scope<'a> {
@@ -88,7 +135,15 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
         empty_note,
     } = *scope;
     let scope = scope_area(area);
+    if scope.width == 0 || scope.height == 0 {
+        return;
+    }
     let r = range;
+    let grid = Grid {
+        r,
+        cols: scope.width,
+        rows: scope.height,
+    };
     let point = |d: f64, deg: f64| {
         let rad = deg.to_radians();
         (d * rad.sin(), d * rad.cos())
@@ -133,10 +188,12 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
             }
             ctx.layer();
             // North-up always, so only North needs marking.
-            let (nx, ny) = point(r * 0.92, 0.0);
+            let (nx, ny) = point(r, 0.0);
+            let (nx, ny) = grid.snap(nx, ny, 0);
             ctx.print(nx, ny, Span::styled("N", Style::new().fg(theme::MUTED)));
             if let Some(range_label) = range_label {
                 let (x, y) = point(r * 0.99, 135.0);
+                let (x, y) = grid.snap(x, y, 0);
                 ctx.print(
                     x,
                     y,
@@ -154,6 +211,7 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
             for wedge in wedges.iter().filter(|w| w.r <= r) {
                 if let Some(label) = &wedge.label {
                     let (x, y) = point(wedge.r, wedge.bearing);
+                    let (x, y) = grid.snap(x, y, 0);
                     ctx.print(
                         x,
                         y,
@@ -162,7 +220,8 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
                 }
             }
             for blip in blips.iter().filter(|b| b.r <= r) {
-                let (x, y) = point(blip.r, blip.bearing);
+                let (bx, by) = point(blip.r, blip.bearing);
+                let (x, y) = grid.snap(bx, by, 0);
                 let behind = (sweep - blip.bearing).rem_euclid(360.0);
                 let dim = if behind < GLOW_DEG {
                     behind / GLOW_DEG * 0.7
@@ -176,16 +235,13 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
                     Span::styled(blip.glyph.clone(), Style::new().fg(color)),
                 );
                 if let Some(label) = &blip.label {
-                    let offset = r * 2.5 / f64::from(scope.width.max(1));
-                    ctx.print(
-                        x + offset,
-                        y,
-                        Span::styled(label.clone(), Style::new().fg(color)),
-                    );
+                    let (lx, ly) = grid.snap(bx, by, 2);
+                    ctx.print(lx, ly, Span::styled(label.clone(), Style::new().fg(color)));
                 }
             }
             // Last, so no blip label can cover the rig's own position.
-            ctx.print(0.0, 0.0, Span::styled("◆", Style::new().fg(theme::CYAN)));
+            let (cx, cy) = grid.snap(0.0, 0.0, 0);
+            ctx.print(cx, cy, Span::styled("◆", Style::new().fg(theme::CYAN)));
         });
     frame.render_widget(canvas, scope);
 }
@@ -221,5 +277,52 @@ mod tests {
         assert!(left.abs_diff(right) <= 1, "{left} vs {right}");
         let (top, bottom) = (scope.y, 21 - (scope.y + scope.height));
         assert!(top.abs_diff(bottom) <= 1, "{top} vs {bottom}");
+    }
+
+    fn grid(cols: u16, rows: u16) -> Grid {
+        Grid {
+            r: 100.0,
+            cols,
+            rows,
+        }
+    }
+
+    /// Where ratatui's label pass puts a label printed at canvas `(x, y)`.
+    fn label_cell(g: &Grid, x: f64, y: f64) -> (u16, u16) {
+        let span = 2.0 * g.r;
+        (
+            ((x + g.r) * f64::from(g.cols - 1) / span) as u16,
+            ((g.r - y) * f64::from(g.rows - 1) / span) as u16,
+        )
+    }
+
+    #[test]
+    fn snapped_labels_land_in_the_braille_cell() {
+        for (cols, rows) in [(40, 20), (41, 21), (30, 15), (38, 19)] {
+            let g = grid(cols, rows);
+            for &(x, y) in &[
+                (0.0, 0.0),
+                (0.0, 100.0),
+                (100.0, 0.0),
+                (-100.0, -100.0),
+                (50.0, -30.0),
+                (-70.7, 70.7),
+            ] {
+                let (sx, sy) = g.snap(x, y, 0);
+                assert_eq!(
+                    label_cell(&g, sx, sy),
+                    g.cell(x, y),
+                    "{cols}x{rows} at ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn center_and_north_sit_on_the_vertical_axis() {
+        let g = grid(40, 20);
+        let (axis_col, _) = g.cell(0.0, 50.0);
+        assert_eq!(g.cell(0.0, 0.0).0, axis_col);
+        assert_eq!(g.cell(0.0, 100.0), (axis_col, 0));
     }
 }
