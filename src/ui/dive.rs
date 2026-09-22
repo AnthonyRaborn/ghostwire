@@ -456,19 +456,31 @@ fn precip_color(prob: f64) -> Color {
     }
 }
 
-fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
-    let (kev_area, hn_area) = if area.width >= 110 {
-        let [a, _, b] = Layout::horizontal([
-            Constraint::Percentage(48),
-            Constraint::Length(2),
-            Constraint::Min(20),
-        ])
-        .areas(area);
-        (a, b)
+/// Splits `area` into `n` equal, evenly gapped sections — side by side when there's
+/// room, stacked otherwise. Used so a configured RSS feed gets a third column without
+/// a separate layout to hand-maintain alongside KEV and HN's.
+fn intercept_columns(area: Rect, n: usize) -> Vec<Rect> {
+    let n = n.max(1) as u32;
+    let mut constraints = Vec::with_capacity(n as usize * 2 - 1);
+    for i in 0..n {
+        if i > 0 {
+            constraints.push(Constraint::Length(2));
+        }
+        constraints.push(Constraint::Ratio(1, n));
+    }
+    let split = if area.width >= 110 {
+        Layout::horizontal(constraints).split(area)
     } else {
-        let [a, b] = Layout::vertical([Constraint::Percentage(45), Constraint::Min(4)]).areas(area);
-        (a, b)
+        Layout::vertical(constraints).split(area)
     };
+    split.iter().step_by(2).copied().collect()
+}
+
+fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+    let show_rss = app.sources.contains_key(&SourceId::Rss);
+    let mut columns = intercept_columns(area, if show_rss { 3 } else { 2 }).into_iter();
+    let kev_area = columns.next().unwrap_or_default();
+    let hn_area = columns.next().unwrap_or_default();
     let width = kev_area.width as usize;
     let mut kev = vec![header("CISA KEV // KNOWN EXPLOITED"), Line::default()];
     match app.readings.get(&SourceId::Kev) {
@@ -531,6 +543,34 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         _ => {}
     }
     frame.render_widget(Paragraph::new(hn), hn_area);
+
+    if !show_rss {
+        return;
+    }
+    let rss_area = columns.next().unwrap_or_default();
+    let width = rss_area.width as usize;
+    let mut rss = vec![header("RSS // INTERCEPTED FEEDS"), Line::default()];
+    match app.readings.get(&SourceId::Rss) {
+        Some(Reading::Rss(headlines)) => {
+            for h in headlines {
+                rss.push(Line::from(vec![
+                    Span::styled(
+                        format!("{:<16} ", fit(&h.source, 15)),
+                        Style::new().fg(theme::GREEN),
+                    ),
+                    value(fit(&h.title, width.saturating_sub(17))),
+                ]));
+                if let Some(t) = h.published {
+                    rss.push(Line::styled(
+                        format!("                 {} ago", ago(t, now)),
+                        Style::new().fg(theme::MUTED),
+                    ));
+                }
+            }
+        }
+        _ => rss.push(awaiting(app, SourceId::Rss)),
+    }
+    frame.render_widget(Paragraph::new(rss), rss_area);
 }
 
 /// Radar on the left, the list on the right.

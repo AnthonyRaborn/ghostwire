@@ -13,8 +13,8 @@ use super::{Feed, FetchError};
 use crate::config::{Config, Units};
 use crate::geo;
 use crate::reading::{
-    Contact, PrecipHour, Quake, Quote, Reading, Satellite, Scales, SpaceWeather, Story, Vuln,
-    Weather,
+    Contact, Headline, PrecipHour, Quake, Quote, Reading, Satellite, Scales, SpaceWeather, Story,
+    Vuln, Weather,
 };
 use crate::source::SourceId;
 
@@ -46,6 +46,38 @@ const HN_TITLES: &[&str] = &[
     "Why every map app gets my street wrong",
     "A visual guide to attention in transformers",
     "The last pay phone in the city still works",
+];
+
+const RSS_HEADLINES: &[(&str, &str)] = &[
+    (
+        "Night Wire",
+        "Undersea cable outage traced to a fishing trawler",
+    ),
+    (
+        "Night Wire",
+        "The quiet return of dial-up in disaster zones",
+    ),
+    (
+        "Peripheral Vision",
+        "A field guide to abandoned server farms",
+    ),
+    (
+        "Peripheral Vision",
+        "Why every city smells different at 4am",
+    ),
+    (
+        "Black Box Digest",
+        "What actually happens when a satellite deorbits",
+    ),
+    (
+        "Black Box Digest",
+        "Interview: the last analog phone switch operator",
+    ),
+    ("Signal/Noise", "A history of the number 404"),
+    (
+        "Signal/Noise",
+        "The economics of ghost kitchens, five years later",
+    ),
 ];
 
 const KEV_TARGETS: &[(&str, &str)] = &[
@@ -145,6 +177,8 @@ impl DemoFeed {
                 Reading::Orbit(orbit(s.first().cloned(), rng))
             }
             (SourceId::Orbit, _) => Reading::Orbit(orbit(None, rng)),
+            (SourceId::Rss, Some(Reading::Rss(h))) => Reading::Rss(rss(h.clone(), rng)),
+            (SourceId::Rss, _) => Reading::Rss(rss(Vec::new(), rng)),
         }
     }
 }
@@ -353,6 +387,33 @@ fn new_story(
         score,
         comments: rng.u32(0..300),
         posted,
+    }
+}
+
+fn rss(mut headlines: Vec<Headline>, rng: &mut Rng) -> Vec<Headline> {
+    let now = Utc::now();
+    if headlines.is_empty() {
+        for _ in 0..rng.usize(4..8) {
+            let published = now - chrono::Duration::minutes(rng.i64(5..900));
+            headlines.push(new_headline(rng, published));
+        }
+    }
+    // Occasionally an item ages out and a fresh one lands.
+    if rng.f64() < 0.15 && headlines.len() > 3 {
+        headlines.pop();
+        headlines.push(new_headline(rng, now));
+    }
+    headlines.sort_by_key(|h| std::cmp::Reverse(h.published));
+    headlines
+}
+
+fn new_headline(rng: &mut Rng, published: chrono::DateTime<Utc>) -> Headline {
+    let (source, title) = pick(rng, RSS_HEADLINES);
+    Headline {
+        title: title.to_string(),
+        source: source.to_string(),
+        link: None,
+        published: Some(published),
     }
 }
 

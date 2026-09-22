@@ -19,7 +19,9 @@ stocks = ["NVDA", "TSM", "MSFT"]
 coins = ["bitcoin", "ethereum", "solana"]
 
 [intercepts]
-rss = []             # RSS/Atom feed URLs — not wired yet
+# RSS or Atom feed URLs, e.g. ["https://example.com/feed.xml"]. Format is
+# auto-detected. An empty list (the default) leaves the source off.
+rss = []
 
 [fx]
 level = "active"     # calm | active | chaotic

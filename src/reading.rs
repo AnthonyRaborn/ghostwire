@@ -16,6 +16,7 @@ pub enum Reading {
     Swpc(SpaceWeather),
     OpenSky(Vec<Contact>),
     Orbit(Vec<Satellite>),
+    Rss(Vec<Headline>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +108,15 @@ pub struct Scales {
     pub g: u8,
     pub s: u8,
     pub r: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Headline {
+    pub title: String,
+    /// The feed's own title, e.g. "The Verge".
+    pub source: String,
+    pub link: Option<String>,
+    pub published: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -176,7 +176,7 @@ mod tests {
             ] {
                 assert!(screen.contains(title), "{title} missing at {w}x{h}");
             }
-            assert!(screen.contains("uplink 9/9"));
+            assert!(screen.contains("uplink 10/10"));
             assert!(screen.contains("all links nominal"));
         }
     }
@@ -272,7 +272,10 @@ mod tests {
         let expected = [
             (NodeId::Zaibatsu, vec!["CRYPTO // 7 DAYS"]),
             (NodeId::Atmos, vec!["NEXT 24H //", "PRECIP NOWCAST //"]),
-            (NodeId::Intercepts, vec!["HACKER NEWS // FRONT PAGE"]),
+            (
+                NodeId::Intercepts,
+                vec!["HACKER NEWS // FRONT PAGE", "RSS // INTERCEPTED FEEDS"],
+            ),
             (
                 NodeId::Seismic,
                 vec!["EVENTS // NEARBY 7 DAYS", "Kp // LAST 72H"],
@@ -375,6 +378,44 @@ mod tests {
         let screen = render(&app, 132, 30);
         assert!(!screen.contains("PRIORITY INTERCEPT"), "{screen}");
         assert!(screen.contains("ISS"), "{screen}");
+    }
+
+    #[test]
+    fn rss_stays_on_screen_alongside_a_full_kev_and_hn() {
+        use crate::reading::{Headline, Story, Vuln};
+
+        let vulns = (0..8)
+            .map(|i| Vuln {
+                cve: format!("CVE-2026-{i}"),
+                vendor: "Acme".into(),
+                product: "Router".into(),
+                name: String::new(),
+                added: Utc::now().date_naive(),
+                ransomware: false,
+            })
+            .collect();
+        let stories = (0..10)
+            .map(|i| Story {
+                id: i,
+                title: format!("Story {i}"),
+                score: 100,
+                comments: 10,
+                posted: Utc::now(),
+            })
+            .collect();
+        let headlines = vec![Headline {
+            title: "Canary headline".into(),
+            source: "Test Feed".into(),
+            link: None,
+            published: Some(Utc::now()),
+        }];
+        let app = app_with(vec![
+            (SourceId::Kev, Ok(crate::reading::Reading::Kev(vulns))),
+            (SourceId::Hn, Ok(crate::reading::Reading::Hn(stories))),
+            (SourceId::Rss, Ok(crate::reading::Reading::Rss(headlines))),
+        ]);
+        let screen = render(&app, 132, 30);
+        assert!(screen.contains("Canary headline"), "{screen}");
     }
 
     #[test]

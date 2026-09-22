@@ -102,7 +102,7 @@ pub fn detect(
                 .into_iter()
                 .collect()
         }
-        Reading::Weather(_) | Reading::Hn(_) | Reading::OpenSky(_) => Vec::new(),
+        Reading::Weather(_) | Reading::Hn(_) | Reading::OpenSky(_) | Reading::Rss(_) => Vec::new(),
     }
 }
 

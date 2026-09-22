@@ -252,12 +252,15 @@ pub(super) fn aqi_color(aqi: f64) -> Color {
     }
 }
 
+/// Per source, so three sources sharing one small tile don't crowd each other out.
+const MAX_INTERCEPT_LINES: usize = 3;
+
 fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     if app.sources.contains_key(&SourceId::Kev) {
         match app.readings.get(&SourceId::Kev) {
             Some(Reading::Kev(vulns)) => {
-                for v in vulns.iter().take(3) {
+                for v in vulns.iter().take(MAX_INTERCEPT_LINES) {
                     // CISA dates entries by US calendar day, so compare local dates.
                     let days =
                         (now.with_timezone(&chrono::Local).date_naive() - v.added).num_days();
@@ -282,7 +285,7 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
     if app.sources.contains_key(&SourceId::Hn) {
         match app.readings.get(&SourceId::Hn) {
             Some(Reading::Hn(stories)) => {
-                for s in stories {
+                for s in stories.iter().take(MAX_INTERCEPT_LINES) {
                     let right = vec![label(format!("{}▲", s.score))];
                     let tag = Span::styled("▓ HN  ", style(theme::CYAN));
                     let room = width.saturating_sub(width_of(&right) + 7);
@@ -290,6 +293,19 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
                 }
             }
             _ => lines.push(awaiting(app, SourceId::Hn)),
+        }
+    }
+    if app.sources.contains_key(&SourceId::Rss) {
+        match app.readings.get(&SourceId::Rss) {
+            Some(Reading::Rss(headlines)) => {
+                for h in headlines.iter().take(MAX_INTERCEPT_LINES) {
+                    let right = vec![label(fit(&h.source, 12))];
+                    let tag = Span::styled("▓ RSS ", style(theme::GREEN));
+                    let room = width.saturating_sub(width_of(&right) + 7);
+                    lines.push(row(vec![tag, value(fit(&h.title, room))], right, width));
+                }
+            }
+            _ => lines.push(awaiting(app, SourceId::Rss)),
         }
     }
     lines

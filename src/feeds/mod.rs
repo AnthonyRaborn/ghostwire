@@ -10,6 +10,7 @@ pub mod kev;
 pub mod open_meteo;
 pub mod opensky;
 pub mod orbit;
+pub mod rss;
 pub mod swpc;
 pub mod usgs;
 
@@ -115,6 +116,7 @@ pub fn spawn_all(
             SourceId::Swpc => launcher.launch(swpc::Swpc),
             SourceId::OpenSky => launcher.launch(opensky::OpenSky::new(config)),
             SourceId::Orbit => launcher.launch(orbit::Orbit::new(config)),
+            SourceId::Rss => launcher.launch(rss::Rss::new(config)),
         }
     }
     launcher.started
@@ -144,6 +146,7 @@ fn enabled(config: &Config, source: SourceId) -> bool {
     match source {
         SourceId::Stocks => !config.zaibatsu.stocks.is_empty(),
         SourceId::Crypto => !config.zaibatsu.coins.is_empty(),
+        SourceId::Rss => !config.intercepts.rss.is_empty(),
         _ => true,
     }
 }

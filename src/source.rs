@@ -28,7 +28,7 @@ impl NodeId {
         match self {
             NodeId::Zaibatsu => &[SourceId::Stocks, SourceId::Crypto],
             NodeId::Atmos => &[SourceId::Weather],
-            NodeId::Intercepts => &[SourceId::Kev, SourceId::Hn],
+            NodeId::Intercepts => &[SourceId::Kev, SourceId::Hn, SourceId::Rss],
             NodeId::Seismic => &[SourceId::Quakes, SourceId::Swpc],
             NodeId::Sky => &[SourceId::OpenSky, SourceId::Orbit],
         }
@@ -47,10 +47,11 @@ pub enum SourceId {
     Swpc,
     OpenSky,
     Orbit,
+    Rss,
 }
 
 impl SourceId {
-    pub const ALL: [SourceId; 9] = [
+    pub const ALL: [SourceId; 10] = [
         SourceId::Stocks,
         SourceId::Crypto,
         SourceId::Weather,
@@ -60,6 +61,7 @@ impl SourceId {
         SourceId::Swpc,
         SourceId::OpenSky,
         SourceId::Orbit,
+        SourceId::Rss,
     ];
 
     pub fn node(self) -> NodeId {
@@ -81,6 +83,7 @@ impl SourceId {
             SourceId::Swpc => "NOAA-SWPC",
             SourceId::OpenSky => "OPENSKY",
             SourceId::Orbit => "WHERETHEISS",
+            SourceId::Rss => "RSS",
         }
     }
 }

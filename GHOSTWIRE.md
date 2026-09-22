@@ -28,7 +28,7 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | ZAIBATSU INDEX | Stock quotes | Finnhub | Free key | 60s in market hours, 15m otherwise |
 | | Crypto prices + 7d sparkline | CoinGecko `/coins/markets` | None (free demo key optional) | 2m |
 | ATMOS // SECTOR | Temp, rain, wind, AQI, UV; dive adds a precip nowcast scope | Open-Meteo forecast + air-quality | None | 10m |
-| INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS | HN Firebase API, CISA KEV JSON | None | 5m / 1h |
+| INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS/Atom feeds | HN Firebase API, CISA KEV JSON, configured feed URLs | None | 5m / 1h / 15m |
 | SEISMIC // HELIOS | Quakes near you + big ones worldwide; Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | USGS GeoJSON feeds; NOAA SWPC JSON | None | 2m; 10m |
 | SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km); adds the ISS's current position | OpenSky Network; wheretheiss.at | None (OpenSky: 400 credits/day anonymous, ≤25 sq° costs 1); None | 5m; 1m |
 
@@ -110,7 +110,8 @@ active 0.9%, chaotic 1.05% of one core, about 13 MB resident.
 
 - **Crates:** ratatui 0.30, crossterm (`event-stream`), tokio, reqwest, serde/serde_json,
   toml, chrono, chrono-tz, directories, clap, tracing (to a log file — the TUI owns
-  stdout), fastrand, libc (process CPU for "neural load").
+  stdout), fastrand, libc (process CPU for "neural load"), feed-rs (RSS/Atom/JSON Feed
+  parsing for INTERCEPTS).
 - **Effects are hand-rolled** rather than `tachyonfx`: the core effect decrypts only the
   cells whose content changed since the last frame (each node keeps a per-cell hash
   snapshot), which doesn't map onto tachyonfx's cell filters. Every effect is a pure
@@ -234,7 +235,8 @@ live beside it in `readings/`.
   rejected-key path is verified live (dummy key → 401 → OFFLINE); a successful quote is
   tested against its documented response shape only, pending a real key.
   API keys moved to `keys.toml` (see Config).
-  **Open:** RSS/Atom for INTERCEPTS isn't wired (the config key is accepted and ignored).
+  **Open:** ~~RSS/Atom for INTERCEPTS isn't wired (the config key is accepted and
+  ignored).~~ Wired later — see below.
 - [x] M4 Diegetic layer — boot log, changed-cells decrypt, glitch bursts, decay static,
   scanlines, chaotic sparkle, the dive cycle with six detail views (radar scopes with a
   sweep for SEISMIC and SKYTRAFFIC, block-font readouts, full-width charts), priority
@@ -282,3 +284,15 @@ live beside it in `readings/`.
   one point wasn't worth the complexity); grid tile and dive both show it as a detail
   line instead, with a PRIORITY INTERCEPT when it climbs above 10° elevation (re-arms
   once it drops back below the horizon).
+- [x] RSS/Atom for INTERCEPTS, closing the M3 open item — `config.intercepts.rss` now
+  actually feeds `SourceId::Rss`, a third source on `NodeId::Intercepts` alongside KEV
+  and HN. `feed-rs` auto-detects RSS 0.9x/1/2, Atom, and JSON Feed from the body, so one
+  parser covers every URL in the list; each is fetched concurrently and a feed that
+  fails just drops out (same graceful-degradation pattern as ATMOS's air quality),
+  failing the source only when every configured feed came back empty. Entries are tagged
+  with their own feed's title and merged/sorted newest-first across feeds. Wiring this up
+  surfaced a real bug in the existing KEV/HN grid tile: neither list was capped, so a
+  full HN page (10 stories) already filled the tile before RSS was added, silently
+  pushing it off the bottom — same class of bug the ORBIT/SKYTRAFFIC fix caught. All
+  three sources are now capped to 3 lines each in the tile (full lists stay on the
+  dive, now a 2-or-3-column layout depending on whether RSS is configured).
