@@ -327,7 +327,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     // The precip nowcast (a compact radar-style scope) sits in the upper right,
     // alongside the current-conditions fields, once there's width for all three
     // columns; the forecast chart below always gets the full row regardless.
-    let show_nowcast = area.width >= 110 && !w.precip_next.is_empty();
+    let show_nowcast = area.width >= 116 && !w.precip_next.is_empty();
     let top_height = if show_nowcast { 13 } else { 9 };
     let [top, _, bottom] = Layout::vertical([
         Constraint::Length(top_height),
@@ -346,7 +346,9 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
             Constraint::Length(big_width.max(12)),
             Constraint::Length(52),
             Constraint::Fill(1),
-            Constraint::Length(34),
+            // Wide enough for the title ("PRECIP NOWCAST // NEXT 4H  open-meteo",
+            // ~38 cols) not to clip.
+            Constraint::Length(40),
             Constraint::Fill(1),
         ])
         .areas(top);
