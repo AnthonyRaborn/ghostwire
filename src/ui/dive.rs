@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, BorderType, Paragraph, Sparkline};
 use super::nodes::{
     aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
 };
-use super::text::{ago, bar, distance, fit, fit_series, price, row, width_of};
+use super::text::{ago, bar, distance, fit, fit_series, price, row, width_of, wrap};
 use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
@@ -555,16 +555,28 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     let rss_area = columns.next().unwrap_or_default();
     let width = rss_area.width as usize;
     let mut rss = vec![header("RSS // INTERCEPTED FEEDS"), Line::default()];
+    // Width of the "{source} " column that titles indent under on wrapped lines.
+    const RSS_TITLE_COL: usize = 17;
     match app.readings.get(&SourceId::Rss) {
         Some(Reading::Rss(headlines)) => {
             for h in headlines {
-                rss.push(Line::from(vec![
-                    Span::styled(
-                        format!("{:<16} ", fit(&h.source, 15)),
-                        Style::new().fg(theme::GREEN),
-                    ),
-                    value(fit(&h.title, width.saturating_sub(17))),
-                ]));
+                let title_lines = wrap(&h.title, width.saturating_sub(RSS_TITLE_COL), 2);
+                for (i, line) in title_lines.into_iter().enumerate() {
+                    if i == 0 {
+                        rss.push(Line::from(vec![
+                            Span::styled(
+                                format!("{:<16} ", fit(&h.source, 15)),
+                                Style::new().fg(theme::GREEN),
+                            ),
+                            value(line),
+                        ]));
+                    } else {
+                        rss.push(Line::from(vec![
+                            Span::raw(" ".repeat(RSS_TITLE_COL)),
+                            value(line),
+                        ]));
+                    }
+                }
                 if let Some(t) = h.published {
                     rss.push(Line::styled(
                         format!("                 {} ago", ago(t, now)),

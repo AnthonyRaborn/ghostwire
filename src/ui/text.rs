@@ -137,6 +137,54 @@ fn thousands(n: u64) -> String {
     out
 }
 
+/// Word-wraps `s` into at most `max_lines` lines of `width` columns each. If it doesn't
+/// all fit, the last line ends in `…`.
+pub fn wrap(s: &str, width: usize, max_lines: usize) -> Vec<String> {
+    if width == 0 || max_lines == 0 {
+        return Vec::new();
+    }
+    let words: Vec<&str> = s.split_whitespace().collect();
+    let mut lines = Vec::new();
+    let mut i = 0;
+    while i < words.len() && lines.len() < max_lines {
+        let (line, next_i) = wrap_line(&words, i, width);
+        lines.push(line);
+        i = next_i;
+    }
+    if i < words.len()
+        && let Some(last) = lines.last_mut()
+    {
+        *last = fit(last, width.saturating_sub(1));
+        last.push('…');
+    }
+    lines
+}
+
+/// Greedily fills one line from `words[i..]`, returning it and the index it stopped at.
+fn wrap_line(words: &[&str], mut i: usize, width: usize) -> (String, usize) {
+    let mut line = String::new();
+    let mut line_w = 0;
+    while i < words.len() {
+        let w = words[i].width();
+        let gap = if line.is_empty() { 0 } else { 1 };
+        if line_w + gap + w > width {
+            if line.is_empty() {
+                line = fit(words[i], width);
+                i += 1;
+            }
+            break;
+        }
+        if !line.is_empty() {
+            line.push(' ');
+            line_w += 1;
+        }
+        line.push_str(words[i]);
+        line_w += w;
+        i += 1;
+    }
+    (line, i)
+}
+
 pub fn width_of(spans: &[Span]) -> usize {
     spans.iter().map(|s| s.content.width()).sum()
 }
@@ -219,6 +267,20 @@ mod tests {
     fn distances() {
         assert_eq!(distance(38.4, Units::Metric), "38km");
         assert_eq!(distance(100.0, Units::Imperial), "62mi");
+    }
+
+    #[test]
+    fn wraps_words_and_marks_truncation() {
+        assert_eq!(
+            wrap("a short title", 20, 2),
+            vec!["a short title".to_string()]
+        );
+        assert_eq!(
+            wrap("a fairly long headline about something", 12, 2),
+            vec!["a fairly".to_string(), "long…".to_string()]
+        );
+        assert_eq!(wrap("word", 0, 2), Vec::<String>::new());
+        assert_eq!(wrap("word", 10, 0), Vec::<String>::new());
     }
 
     #[test]
