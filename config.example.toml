@@ -1,0 +1,24 @@
+# GHOSTWIRE config. Every field is optional; anything left out uses the default.
+
+[sector]
+name = "SECTOR-4"
+# Your coordinates. ATMOS, the SEISMIC radius, and SKYTRAFFIC stay offline until set.
+# lat = 37.77
+# lon = -122.42
+radius_km = 300      # range for nearby quakes and flights
+units = "metric"     # or "imperial"
+
+[zaibatsu]
+# Stock quotes need a free Finnhub key in the FINNHUB_API_KEY environment variable.
+# An empty list turns the source off.
+stocks = ["NVDA", "TSM", "MSFT"]
+# CoinGecko coin ids (not ticker symbols).
+coins = ["bitcoin", "ethereum", "solana"]
+
+[intercepts]
+rss = []
+
+[fx]
+level = "active"     # calm | active | chaotic
+breach_every = "45s"
+breach_hold = "15s"
