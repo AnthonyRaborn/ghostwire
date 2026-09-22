@@ -49,7 +49,9 @@ pub fn draw(
         .border_style(Style::new().fg(theme::CYAN))
         .title(Line::styled(
             lexicon::dive_title(&lexicon::node_title(node, &app.config.sector.name)),
-            Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
+            Style::new()
+                .fg(theme::title_color(link.as_ref()))
+                .add_modifier(Modifier::BOLD),
         ))
         .title(right.right_aligned());
     let inner = block.inner(area);
@@ -1016,20 +1018,28 @@ fn uplink_detail(frame: &mut Frame, area: Rect, link: &LinkHealth) {
         details,
     );
 
-    if link.history.len() > 1 {
-        frame.render_widget(
-            Paragraph::new(header("LATENCY // RECENT")),
-            Rect {
-                height: 1,
-                ..chart_area
-            },
-        );
-        let graph = Rect {
-            y: chart_area.y + 1,
-            height: chart_area.height.saturating_sub(1),
+    frame.render_widget(
+        Paragraph::new(header("LATENCY // RECENT")),
+        Rect {
+            height: 1,
             ..chart_area
-        };
+        },
+    );
+    let graph = Rect {
+        y: chart_area.y + 1,
+        height: chart_area.height.saturating_sub(1),
+        ..chart_area
+    };
+    if link.history.len() > 1 {
         chart(frame, graph, &link.history, None, color);
+    } else {
+        frame.render_widget(
+            Paragraph::new(Line::styled(
+                lexicon::SAMPLING_LATENCY,
+                Style::new().fg(theme::MUTED),
+            )),
+            graph,
+        );
     }
 }
 

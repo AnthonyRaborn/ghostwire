@@ -10,6 +10,8 @@ pub const KEYS_DIVE: &str = "[esc] surface  [space] next  [p] hold  [q] jack out
 pub const JACKING_IN: &str = "JACKING IN";
 pub const DIVE_HELD: &str = "» dive cycle held";
 pub const NO_FIX_RADAR: &str = "NO SECTOR FIX";
+/// Shown in place of the latency chart until the uplink has more than one sample.
+pub const SAMPLING_LATENCY: &str = "sampling // history builds after the next few pings";
 pub const NOMINAL: &str = "» all links nominal";
 /// Shown when the config lists nothing for any of a node's sources.
 pub const NOT_WIRED: &str = "NO UPLINK // no sources enabled in config";

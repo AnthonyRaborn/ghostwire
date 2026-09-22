@@ -39,6 +39,16 @@ pub fn border_color(link: Option<&Link>) -> Color {
     }
 }
 
+/// A node's title normally reads as plain rig-cyan; on ICE/TRACE/FLATLINED it picks up
+/// the same alarm color as the border, so the name doesn't look calm while the frame
+/// around it is shouting.
+pub fn title_color(link: Option<&Link>) -> Color {
+    match link {
+        Some(l @ (Link::Ice | Link::Trace | Link::Flatlined)) => link_color(l),
+        _ => CYAN,
+    }
+}
+
 /// Linear blend from `from` toward `to`. Non-RGB colors are returned unchanged.
 pub fn mix(from: Color, to: Color, t: f32) -> Color {
     let from = if from == Color::Reset { TEXT } else { from };

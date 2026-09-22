@@ -39,7 +39,9 @@ pub fn draw(
         Span::styled(format!(" {hotkey}·"), Style::new().fg(theme::MUTED)),
         Span::styled(
             format!("{} ", lexicon::node_title(node, &app.config.sector.name)),
-            Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
+            Style::new()
+                .fg(theme::title_color(link.as_ref()))
+                .add_modifier(Modifier::BOLD),
         ),
     ]);
     let block = Block::bordered()
