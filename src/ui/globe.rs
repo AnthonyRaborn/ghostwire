@@ -20,8 +20,8 @@ pub fn subsolar(now: DateTime<Utc>) -> (f64, f64) {
     let day_of_year = f64::from(hour_mark.ordinal());
     // Low-precision solar declination (good to ~1°) — plenty for a decorative sketch,
     // not a navigation instrument.
-    let decl = 23.44_f64.to_radians()
-        * (((360.0 / 365.0) * (day_of_year - 81.0)).to_radians()).sin();
+    let decl =
+        23.44_f64.to_radians() * (((360.0 / 365.0) * (day_of_year - 81.0)).to_radians()).sin();
     // Subsolar longitude: noon local solar time sits under the sun, and that sweeps
     // west 15°/hour as the day turns.
     let lon = (180.0 - f64::from(hour_mark.hour()) * 15.0 + 180.0).rem_euclid(360.0) - 180.0;
@@ -85,7 +85,12 @@ fn is_land(lat: f64, lon: f64) -> bool {
 /// heavier than ocean in both, with the sector's fix (if any) marked. `cols` should run
 /// roughly 4x `rows` to read as a map — 360°/180° of lon/lat is 2:1, and terminal cells
 /// are about twice as tall as wide.
-pub fn render(cols: usize, rows: usize, now: DateTime<Utc>, sector: Option<(f64, f64)>) -> Vec<Line<'static>> {
+pub fn render(
+    cols: usize,
+    rows: usize,
+    now: DateTime<Utc>,
+    sector: Option<(f64, f64)>,
+) -> Vec<Line<'static>> {
     if cols == 0 || rows == 0 {
         return Vec::new();
     }

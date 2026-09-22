@@ -1,5 +1,5 @@
 [package]
-name = "ghostwire"
+name = "ghostwire-tui"
 version = "1.0.0"
 edition = "2024"
 description = "A terminal dashboard for live public data feeds, styled as a netrunner rig you've jacked into."
@@ -9,6 +9,10 @@ repository = "https://github.com/AnthonyRaborn/ghostwire"
 readme = "README.md"
 keywords = ["terminal", "tui", "dashboard", "weather", "cyberpunk"]
 categories = ["command-line-utilities", "visualization"]
+
+[[bin]]
+name = "ghostwire"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"

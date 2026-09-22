@@ -828,7 +828,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ghostwire"
+name = "ghostwire-tui"
 version = "1.0.0"
 dependencies = [
  "anyhow",

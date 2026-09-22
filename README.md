@@ -24,7 +24,7 @@ a radar scope, a bar chart, a block-font readout — then surfaces back to the g
 ## Install
 
 ```bash
-cargo install ghostwire
+cargo install ghostwire-tui
 ```
 
 Or build from source:
@@ -71,10 +71,23 @@ in `keys.toml`, next to the config file; every other feed works with no key at a
 | `r` | re-breach: every source fetches now | same |
 | `q` / `ctrl-c` | jack out | same |
 
-## More
+## Nodes and data sources
 
-[GHOSTWIRE.md](GHOSTWIRE.md) has the full picture: every node and its data source,
-the config file format, FX levels, and the architecture behind it.
+| Node | Shows | Source | Key |
+|---|---|---|---|
+| ZAIBATSU INDEX | Stock quotes; crypto prices + 7d sparkline | Finnhub; CoinGecko | Free Finnhub key; CoinGecko demo key optional |
+| ATMOS // SECTOR | Temp, rain, wind, AQI, UV, precip nowcast | Open-Meteo | None |
+| INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS/Atom feeds | HN API, CISA KEV, your feed URLs | None |
+| SEISMIC // HELIOS | Nearby + major global quakes; Kp, X-ray flux, NOAA G/S/R scales | USGS; NOAA SWPC | None |
+| SKYTRAFFIC | Aircraft within `flight_radius_km`; the ISS's position | OpenSky Network; wheretheiss.at | None |
+| NETSTATUS | Country internet-outage alerts; the rig's own uplink latency | IODA; Cloudflare trace | None |
+
+## Configuration
+
+[`config.example.toml`](config.example.toml) documents every config option (location,
+tickers, RSS feeds, FX level, dive timing), and [`keys.example.toml`](keys.example.toml)
+covers the API keys. `fx.level` picks how much the rig glitches: `calm`, `active` (the
+default), or `chaotic`.
 
 ## License
 

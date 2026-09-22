@@ -205,7 +205,10 @@ impl Config {
 
     fn validate(&self) -> Result<()> {
         if self.rig.number > 99 {
-            bail!("[rig] number {} must be 0-99, shown as two digits", self.rig.number);
+            bail!(
+                "[rig] number {} must be 0-99, shown as two digits",
+                self.rig.number
+            );
         }
         let s = &self.sector;
         if s.lat.is_some() != s.lon.is_some() {

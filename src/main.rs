@@ -39,6 +39,7 @@ const LOG_ROTATE_BYTES: u64 = 5_000_000;
 
 #[derive(Parser)]
 #[command(
+    name = "ghostwire",
     version,
     about = "Ambient netrunner rig: live public feeds in your terminal."
 )]

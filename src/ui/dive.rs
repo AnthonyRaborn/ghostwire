@@ -19,7 +19,9 @@ use super::{bigtext, globe, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
-use crate::reading::{LinkHealth, OutageAlert, Quake, Quote, Reading, Satellite, Weather, xray_class};
+use crate::reading::{
+    LinkHealth, OutageAlert, Quake, Quote, Reading, Satellite, Weather, xray_class,
+};
 use crate::source::{NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -104,8 +106,16 @@ fn chart(frame: &mut Frame, area: Rect, values: &[f64], range: Option<(f64, f64)
             })
     });
     // A flat series still needs distinct bounds so the trace doesn't divide by zero.
-    let (lo, hi) = if hi > lo { (lo, hi) } else { (lo - 1.0, hi + 1.0) };
-    let points: Vec<(f64, f64)> = values.iter().enumerate().map(|(i, &v)| (i as f64, v)).collect();
+    let (lo, hi) = if hi > lo {
+        (lo, hi)
+    } else {
+        (lo - 1.0, hi + 1.0)
+    };
+    let points: Vec<(f64, f64)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (i as f64, v))
+        .collect();
     let dataset = Dataset::default()
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
@@ -137,7 +147,11 @@ fn overlay_chart(frame: &mut Frame, area: Rect, series: &[(&[f64], Color)]) {
                 .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
                     (lo.min(v), hi.max(v))
                 });
-            let (lo, hi) = if hi > lo { (lo, hi) } else { (lo - 1.0, hi + 1.0) };
+            let (lo, hi) = if hi > lo {
+                (lo, hi)
+            } else {
+                (lo - 1.0, hi + 1.0)
+            };
             values
                 .iter()
                 .enumerate()
@@ -506,7 +520,11 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     )];
     title_spans.extend(legend);
     frame.render_widget(
-        Paragraph::new(row(title_spans, vec![label("open-meteo")], title.width as usize)),
+        Paragraph::new(row(
+            title_spans,
+            vec![label("open-meteo")],
+            title.width as usize,
+        )),
         title,
     );
     overlay_chart(frame, graph, &series);
@@ -697,7 +715,10 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     match app.readings.get(&SourceId::Hn) {
         Some(Reading::Hn(stories)) => {
             for (rank, s) in stories.iter().enumerate() {
-                for (i, line) in wrap(&s.title, width.saturating_sub(4), 2).into_iter().enumerate() {
+                for (i, line) in wrap(&s.title, width.saturating_sub(4), 2)
+                    .into_iter()
+                    .enumerate()
+                {
                     if i == 0 {
                         hn.push(Line::from(vec![
                             Span::styled(
@@ -1013,7 +1034,13 @@ fn solar_detail(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(header("Kp // LAST 72H (3-HOURLY)")),
         chart_header,
     );
-    chart(frame, chart_graph, &s.kp_history, Some((0.0, 9.0)), theme::CYAN);
+    chart(
+        frame,
+        chart_graph,
+        &s.kp_history,
+        Some((0.0, 9.0)),
+        theme::CYAN,
+    );
     frame.render_widget(
         Paragraph::new(axis(
             &["-72h", "-48h", "-24h", "now"],
