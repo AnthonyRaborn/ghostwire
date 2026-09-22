@@ -146,6 +146,8 @@ fn enabled(config: &Config, source: SourceId) -> bool {
     match source {
         SourceId::Stocks => !config.zaibatsu.stocks.is_empty(),
         SourceId::Crypto => !config.zaibatsu.coins.is_empty(),
+        SourceId::Hn => config.intercepts.hn,
+        SourceId::Kev => config.intercepts.kev,
         SourceId::Rss => !config.intercepts.rss.is_empty(),
         _ => true,
     }
@@ -235,5 +237,20 @@ mod tests {
         let third = backoff(base, 3);
         assert!(third >= Duration::from_secs(32) && third <= Duration::from_secs(48));
         assert!(backoff(base, 40) <= MAX_BACKOFF.mul_f64(1.2));
+    }
+
+    #[test]
+    fn intercepts_sources_can_be_individually_suppressed() {
+        let mut config = Config::default();
+        assert!(enabled(&config, SourceId::Hn));
+        assert!(enabled(&config, SourceId::Kev));
+        assert!(!enabled(&config, SourceId::Rss));
+
+        config.intercepts.hn = false;
+        config.intercepts.kev = false;
+        config.intercepts.rss = vec!["https://example.com/feed.xml".into()];
+        assert!(!enabled(&config, SourceId::Hn));
+        assert!(!enabled(&config, SourceId::Kev));
+        assert!(enabled(&config, SourceId::Rss));
     }
 }

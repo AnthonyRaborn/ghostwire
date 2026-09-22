@@ -19,6 +19,10 @@ stocks = ["NVDA", "TSM", "MSFT"]
 coins = ["bitcoin", "ethereum", "solana"]
 
 [intercepts]
+# The built-in sources are on by default; set either to false to drop it (e.g. to run
+# on RSS alone).
+hn = true
+kev = true
 # RSS or Atom feed URLs, e.g. ["https://example.com/feed.xml"]. Format is
 # auto-detected. An empty list (the default) leaves the source off.
 rss = []

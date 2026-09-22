@@ -168,7 +168,9 @@ stocks = ["NVDA", "TSM", "MSFT"]   # needs a Finnhub key in keys.toml
 coins  = ["bitcoin", "ethereum"]   # CoinGecko ids
 
 [intercepts]
-rss = []
+hn = true            # set false to drop the built-in sources, e.g. to run on RSS alone
+kev = true
+rss = []             # RSS/Atom feed URLs
 
 [fx]
 level = "active"     # calm | active | chaotic
@@ -296,3 +298,8 @@ live beside it in `readings/`.
   pushing it off the bottom — same class of bug the ORBIT/SKYTRAFFIC fix caught. All
   three sources are now capped to 3 lines each in the tile (full lists stay on the
   dive, now a 2-or-3-column layout depending on whether RSS is configured).
+- [x] `[intercepts] hn`/`kev` toggles — KEV and HN were the only two sources on the rig
+  with no way to turn them off (every other node's sources can be dropped via an empty
+  list or a missing key). Added as plain booleans, on by default, checked by
+  `enabled()` in feeds/mod.rs the same way `zaibatsu.stocks`/`coins` already gate
+  Stocks/Crypto — so a rig can now run INTERCEPTS on RSS alone.

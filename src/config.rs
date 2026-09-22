@@ -72,10 +72,23 @@ impl Default for Zaibatsu {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Intercepts {
+    /// The built-in sources, on by default — set to `false` to run on RSS alone.
+    pub hn: bool,
+    pub kev: bool,
     pub rss: Vec<String>,
+}
+
+impl Default for Intercepts {
+    fn default() -> Self {
+        Self {
+            hn: true,
+            kev: true,
+            rss: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -192,6 +205,15 @@ mod tests {
         let config = Config::parse("").unwrap();
         assert_eq!(config.sector.radius_km, 300.0);
         assert_eq!(config.fx.level, FxLevel::Active);
+        assert!(config.intercepts.hn);
+        assert!(config.intercepts.kev);
+    }
+
+    #[test]
+    fn intercepts_sources_can_be_turned_off() {
+        let config = Config::parse("[intercepts]\nhn = false\nkev = false").unwrap();
+        assert!(!config.intercepts.hn);
+        assert!(!config.intercepts.kev);
     }
 
     #[test]
