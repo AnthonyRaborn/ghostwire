@@ -8,6 +8,8 @@ use ratatui::symbols::Marker;
 use ratatui::text::Span;
 use ratatui::widgets::canvas::{Canvas, Circle, Line as CanvasLine};
 
+use unicode_width::UnicodeWidthStr;
+
 use crate::theme;
 
 /// One full turn of the sweep.
@@ -191,8 +193,21 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
             let (nx, ny) = point(r, 0.0);
             let (nx, ny) = grid.snap(nx, ny, 0);
             ctx.print(nx, ny, Span::styled("N", Style::new().fg(theme::MUTED)));
+            // Cells already claimed by text, as (row, first col, last col), so a blip
+            // label that would run into another label, the range label, a blip glyph,
+            // or the rig marker is dropped rather than printed over it.
+            let mut taken: Vec<(u16, u16, u16)> = Vec::new();
+            let (center_col, center_row) = grid.cell(0.0, 0.0);
+            taken.push((center_row, center_col, center_col));
+            for blip in blips.iter().filter(|b| b.r <= r) {
+                let (bx, by) = point(blip.r, blip.bearing);
+                let (col, row) = grid.cell(bx, by);
+                taken.push((row, col, col + blip.glyph.width().max(1) as u16 - 1));
+            }
             if let Some(range_label) = range_label {
                 let (x, y) = point(r * 0.99, 135.0);
+                let (col, row) = grid.cell(x, y);
+                taken.push((row, col, col + range_label.width().max(1) as u16 - 1));
                 let (x, y) = grid.snap(x, y, 0);
                 ctx.print(
                     x,
@@ -240,8 +255,15 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
                     Span::styled(blip.glyph.clone(), Style::new().fg(color)),
                 );
                 if let Some(label) = &blip.label {
-                    let (lx, ly) = grid.snap(bx, by, 2);
-                    ctx.print(lx, ly, Span::styled(label.clone(), Style::new().fg(color)));
+                    let (col, row) = grid.cell(bx, by);
+                    let span = (row, col + 2, col + 1 + label.width().max(1) as u16);
+                    let overlaps =
+                        |&(r, a, b): &(u16, u16, u16)| r == span.0 && a <= span.2 && span.1 <= b;
+                    if !taken.iter().any(overlaps) {
+                        taken.push(span);
+                        let (lx, ly) = grid.label_at(span.1, row);
+                        ctx.print(lx, ly, Span::styled(label.clone(), Style::new().fg(color)));
+                    }
                 }
             }
             // Last, so no blip label can cover the rig's own position.
@@ -329,5 +351,45 @@ mod tests {
         let (axis_col, _) = g.cell(0.0, 50.0);
         assert_eq!(g.cell(0.0, 0.0).0, axis_col);
         assert_eq!(g.cell(0.0, 100.0), (axis_col, 0));
+    }
+
+    #[test]
+    fn crowded_labels_are_dropped_not_overprinted() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let blip = |r: f64, label: &str| Blip {
+            r,
+            bearing: 240.0,
+            glyph: "•".into(),
+            color: theme::TEXT,
+            label: Some(label.into()),
+        };
+        // Nearest first, as the dives order them; the second sits a cell or so away.
+        let blips = [blip(49.0, "ASA1577"), blip(52.0, "JBU847")];
+        let mut term = Terminal::new(TestBackend::new(40, 20)).unwrap();
+        term.draw(|f| {
+            draw(
+                f,
+                f.area(),
+                &Scope {
+                    range: 100.0,
+                    blips: &blips,
+                    wedges: &[],
+                    rings: 2,
+                    sweep: 0.0,
+                    range_label: None,
+                    empty_note: None,
+                },
+            )
+        })
+        .unwrap();
+        let text: String = term
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(text.contains("ASA1577"));
+        assert!(!text.contains("847"), "the farther label should be dropped");
     }
 }

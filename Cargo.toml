@@ -8,6 +8,7 @@ license = "MIT"
 authors = ["Anthony W. Raborn <anthony@raborndecisionsciences.com>"]
 repository = "https://github.com/AnthonyRaborn/ghostwire"
 readme = "README.md"
+exclude = ["docs/", ".github/", "dist-workspace.toml"]
 keywords = ["terminal", "tui", "dashboard", "weather", "cyberpunk"]
 categories = ["command-line-utilities", "visualization"]
 

@@ -5,18 +5,7 @@ weather, air traffic, internet outages, Hacker News, and known-exploited CVEs �
 as a netrunner rig you've jacked into. Leave it running on a spare monitor: a refresh
 decrypts the node, stale data decays, a failed request is ICE, a rate limit is a trace.
 
-```
- GHOSTWIRE // ZERO-DAY // RIG-07 ░ uplink 6/6 ░ neural load 3% ░ 21:14:07 NET
-┌ ZAIBATSU INDEX ────────┐┌ ATMOS//SECTOR-4 ───────┐┌ INTERCEPTS ────────────┐
-│ NVDA   182.40 ▲2.1% ▅▆▇││ 17°C  RAIN 20%  WIND 9 ││ ▓ HN  Show HN: a tiny… │
-│ BTC    61,204 ▼0.8% ▇▆▅││ SMOG AQI 42 ░░▒  UV 3  ││ ▓ KEV CVE-2026-41822   │
-└────────────────────────┘└────────────────────────┘└────────────────────────┘
-┌ SEISMIC // HELIOS ─────┐┌ SKYTRAFFIC ────────────┐┌ NETSTATUS ─────────────┐
-│ M2.1  38km NE   4m ago ││ 7 contacts overhead    ││ UPLINK 14ms  SJC       │
-│ Kp 3 ▂▃▃▅  G0 S0 R0    ││ UAL1234  FL340  ↗ 452kt││ US NOMINAL             │
-└────────────────────────┘└────────────────────────┘└────────────────────────┘
- » diving SKYTRAFFIC in 12s ░ NOAA-SWPC: ICE, retry 30s ░ 2 ghosts cached
-```
+![GHOSTWIRE running in demo mode: the six-node grid, then dives into ATMOS, SEISMIC // HELIOS, and SKYTRAFFIC](docs/demo.gif)
 
 Every 45 seconds the rig takes over the screen with a full-detail dive into one node —
 a radar scope, a bar chart, a block-font readout — then surfaces back to the grid.
