@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use ratatui::buffer::Buffer;
+
 use chrono::{DateTime, Utc};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -11,24 +13,38 @@ use unicode_width::UnicodeWidthStr;
 use super::text::{ago, bar, distance, fit, price, row, spark, spinner, width_of};
 use crate::app::App;
 use crate::config::Units;
+use crate::fx::{self, Fx};
 use crate::reading::{Quote, Reading, xray_class};
 use crate::source::{Link, NodeId, SourceId};
-use crate::{fx, geo, lexicon, theme};
+use crate::{geo, lexicon, theme};
 
 /// How far fully decayed data fades toward the background.
 const MAX_FADE: f32 = 0.7;
 /// Ghost data is always at least this faded, however recent it is.
 const GHOST_FADE: f32 = 0.4;
 
-pub fn draw(frame: &mut Frame, area: Rect, app: &App, node: NodeId, now: DateTime<Utc>) {
+pub fn draw(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    node: NodeId,
+    now: DateTime<Utc>,
+    instant: Instant,
+    fx: &mut Fx,
+) {
     let link = app.node_link(node);
-    let title = Span::styled(
-        format!(" {} ", lexicon::node_title(node, &app.config.sector.name)),
-        Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
-    );
+    // The number is the node's dive hotkey.
+    let hotkey = NodeId::ALL.iter().position(|n| *n == node).unwrap_or(0) + 1;
+    let title = Line::from(vec![
+        Span::styled(format!(" {hotkey}·"), Style::new().fg(theme::MUTED)),
+        Span::styled(
+            format!("{} ", lexicon::node_title(node, &app.config.sector.name)),
+            Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
+        ),
+    ]);
     let block = Block::bordered()
         .border_style(Style::new().fg(theme::border_color(link.as_ref())))
-        .title(Line::from(title))
+        .title(title)
         .title(status(app, node, link.as_ref(), now).right_aligned());
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -37,16 +53,29 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, node: NodeId, now: DateTim
         inner,
     );
 
-    let mut fade = app.node_decay(node, now) * MAX_FADE;
-    if link == Some(Link::Ghost) {
+    let decay = app.node_decay(node, now);
+    let buf = frame.buffer_mut();
+    fade_for(buf, inner, decay, link.as_ref());
+    fx.node(buf, area, inner, node, instant, decay);
+}
+
+/// Stale data dims with age; ghost data is always somewhat dim.
+pub(super) fn fade_for(buf: &mut Buffer, area: Rect, decay: f32, link: Option<&Link>) {
+    let mut fade = decay * MAX_FADE;
+    if link == Some(&Link::Ghost) {
         fade = fade.max(GHOST_FADE);
     }
     if fade > 0.0 {
-        fx::fade(frame.buffer_mut(), inner, fade);
+        fx::fade(buf, area, fade);
     }
 }
 
-fn status(app: &App, node: NodeId, link: Option<&Link>, now: DateTime<Utc>) -> Line<'static> {
+pub(super) fn status(
+    app: &App,
+    node: NodeId,
+    link: Option<&Link>,
+    now: DateTime<Utc>,
+) -> Line<'static> {
     let Some(link) = link else {
         return Line::default();
     };
@@ -87,16 +116,16 @@ fn style(fg: Color) -> Style {
     Style::new().fg(fg)
 }
 
-fn label(text: impl Into<String>) -> Span<'static> {
+pub(super) fn label(text: impl Into<String>) -> Span<'static> {
     Span::styled(text.into(), style(theme::MUTED))
 }
 
-fn value(text: impl Into<String>) -> Span<'static> {
+pub(super) fn value(text: impl Into<String>) -> Span<'static> {
     Span::styled(text.into(), style(theme::TEXT))
 }
 
 /// Placeholder line for a source with nothing to show yet.
-fn awaiting(app: &App, id: SourceId) -> Line<'static> {
+pub(super) fn awaiting(app: &App, id: SourceId) -> Line<'static> {
     let state = &app.sources[&id];
     let mut text = lexicon::awaiting(
         id.handle(),
@@ -215,7 +244,7 @@ fn atmos(app: &App, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
-fn aqi_color(aqi: f64) -> Color {
+pub(super) fn aqi_color(aqi: f64) -> Color {
     match aqi {
         a if a <= 50.0 => theme::GREEN,
         a if a <= 100.0 => theme::YELLOW,
@@ -303,7 +332,7 @@ fn seismic(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn mag_color(mag: f64) -> Color {
+pub(super) fn mag_color(mag: f64) -> Color {
     match mag {
         m if m < 2.5 => theme::MUTED,
         m if m < 4.5 => theme::TEXT,
@@ -316,11 +345,7 @@ fn helios(app: &App, width: usize) -> Vec<Line<'static>> {
     let Some(Reading::Swpc(s)) = app.readings.get(&SourceId::Swpc) else {
         return Vec::new();
     };
-    let kp_color = match s.kp {
-        k if k < 4.0 => theme::GREEN,
-        k if k < 5.0 => theme::YELLOW,
-        _ => theme::MAGENTA,
-    };
+    let color = kp_color(s.kp);
     let scale = |letter: char, level: u8| {
         let fg = match level {
             0 => theme::MUTED,
@@ -332,11 +357,8 @@ fn helios(app: &App, width: usize) -> Vec<Line<'static>> {
     vec![
         Line::from(vec![
             label("Kp "),
-            Span::styled(
-                format!("{:.1} {} ", s.kp, lexicon::kp(s.kp)),
-                style(kp_color),
-            ),
-            Span::styled(bar(s.kp / 9.0, 9), style(kp_color)),
+            Span::styled(format!("{:.1} {} ", s.kp, lexicon::kp(s.kp)), style(color)),
+            Span::styled(bar(s.kp / 9.0, 9), style(color)),
         ]),
         Line::from(vec![
             // NOAA publishes Kp every 3 hours, so 24 readings span three days.
@@ -396,4 +418,12 @@ fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
         lines.push(row(vec![value(left)], vec![label(right)], width));
     }
     lines
+}
+
+pub(super) fn kp_color(kp: f64) -> Color {
+    match kp {
+        k if k < 4.0 => theme::GREEN,
+        k if k < 5.0 => theme::YELLOW,
+        _ => theme::MAGENTA,
+    }
 }

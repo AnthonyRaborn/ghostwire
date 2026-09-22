@@ -5,9 +5,14 @@ use crate::source::{Link, NodeId};
 pub const RIG: &str = "GHOSTWIRE";
 pub const RIG_ID: &str = "RIG-07";
 pub const CONSTRUCT: &str = "CONSTRUCT // SIMULATED FEEDS";
-pub const KEYS: &str = "[r] re-breach  [q] jack out";
+pub const KEYS_GRID: &str = "[1-6] dive  [space] next  [p] hold  [r] re-breach  [q] jack out";
+pub const KEYS_DIVE: &str = "[esc] surface  [space] next  [p] hold  [q] jack out";
+pub const JACKING_IN: &str = "JACKING IN";
+pub const DIVE_HELD: &str = "» dive cycle held";
+pub const NO_FIX_RADAR: &str = "NO SECTOR FIX";
 pub const NOMINAL: &str = "» all links nominal";
-pub const NOT_WIRED: &str = "NO UPLINK // node not wired yet";
+/// Shown when the config lists nothing for any of a node's sources.
+pub const NOT_WIRED: &str = "NO UPLINK // no sources enabled in config";
 pub const NO_CONFIG: &str = "NO CONFIG // run ghostwire --init-config";
 pub const NO_FINNHUB_KEY: &str = "no key: add finnhub to keys.toml";
 pub const KEYS_EXPOSED: &str = "KEYS EXPOSED // chmod 600 keys.toml";
@@ -122,6 +127,45 @@ pub fn ghosts(count: usize) -> String {
     match count {
         1 => "1 ghost cached".into(),
         n => format!("{n} ghosts cached"),
+    }
+}
+
+pub fn dive_title(node_title: &str) -> String {
+    format!(" ◢ DIVE // {node_title} ◣ ")
+}
+
+pub fn diving_in(node_title: &str, secs: u64) -> String {
+    format!("» diving {node_title} in {secs}s")
+}
+
+pub fn surfacing_in(secs: u64) -> String {
+    format!("» surfacing in {secs}s")
+}
+
+pub fn intercept(node_title: &str, text: &str) -> String {
+    format!("!! PRIORITY INTERCEPT // {node_title} // {text}")
+}
+
+/// NOAA's words for each level of its G, S, and R scales.
+pub fn noaa_scale(level: u8) -> &'static str {
+    match level {
+        0 => "none",
+        1 => "minor",
+        2 => "moderate",
+        3 => "strong",
+        4 => "severe",
+        _ => "extreme",
+    }
+}
+
+/// WHO UV index band.
+pub fn uv(uv: f64) -> &'static str {
+    match uv {
+        u if u < 3.0 => "LOW",
+        u if u < 6.0 => "MODERATE",
+        u if u < 8.0 => "HIGH",
+        u if u < 11.0 => "VERY HIGH",
+        _ => "EXTREME",
     }
 }
 

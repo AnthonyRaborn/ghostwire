@@ -16,7 +16,7 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | Role | Netrunner rig |
 | Usage | Ambient display on a spare monitor |
 | Stack | Rust + Ratatui |
-| Layout | Hybrid: full grid, with a periodic full-screen breach of one node |
+| Layout | Hybrid: full grid, with a periodic full-screen dive into one node |
 | API keys | Free keys OK (Finnhub for stocks only; everything else keyless), kept in `keys.toml` |
 | Location | Set in the config file; nothing auto-detected |
 | FX level | Active by default (`calm` / `active` / `chaotic` selectable) |
@@ -49,33 +49,70 @@ sources, and the footer ticker reports any source that's in trouble.
 │ M2.1  38km NE   4m ago ││ Kp 3 ▂▃▃▅  STORM: NONE ││ 7 contacts overhead    │
 │ M4.6  Tonga    19m ago ││ !! ICE // retry 30s    ││ UAL1234  FL340  ↗ 452kt│
 └────────────────────────┘└────────────────────────┘└────────────────────────┘
- » breaching SKYTRAFFIC in 12s ░ HELIOS: ICE, retry 30s ░ 2 ghosts cached
+ » diving SKYTRAFFIC in 12s ░ HELIOS: ICE, retry 30s ░ 2 ghosts cached
 ```
 
-Every 45s the rig breaches one node: it expands full-screen for 15s with detail
-(sparklines, full lists, an ASCII radar for quakes and flights), then collapses back.
+Every 45s the rig **dives** into one node: it takes over the grid for 15s with detail
+(bar charts, full lists, a radar scope with a rotating sweep for quakes and flights),
+then surfaces. Nodes take turns in grid order, skipping any with nothing to show.
+("Breach" means fetching — `» breaching`, `[r] re-breach` — so the full-screen view got
+its own word.)
 
 ## Real state → in the rig
 
 | Real state | In the rig |
 |---|---|
-| App launch | Jack-in: nodes discovered → "breaching…" → decrypt reveal as each first fetch lands |
+| App launch | Jack-in: a boot log types itself out — real facts about this run (config, sector, keys, ghost cache, node count) — then every node decrypts in |
 | Refresh | Scramble-then-resolve animation on changed values only |
 | Data getting old | Signal decay: colors dim, noise creeps in, age shown |
 | Fetch error | ICE detected, retry countdown; 3+ consecutive failures → FLATLINED |
 | HTTP 429 | TRACE ACTIVE — the source goes dark for the backoff window |
 | Missing key / location | OFFLINE with the reason (no retry until config changes) |
 | Cached data on restart | Ghost data, dimmed until live data lands |
-| Notable event | PRIORITY INTERCEPT: glitch burst, and the node jumps the breach queue |
+| Notable event | PRIORITY INTERCEPT: banner in the ticker for 30s, glitch burst, and the node is dived into next, within 2s |
 
-Notable events: price move ≥3%, quake ≥M4 within your radius, Kp ≥5, new KEV entry.
+Notable events: a price crossing ±3% (re-arms below 2.5%), a new quake ≥M4 within your
+radius from the last 6 hours, Kp crossing 5 (re-arms below 4.5), or a new KEV entry
+compared with the previous catalog.
+
+## Keys
+
+| Key | Grid | Dive |
+|---|---|---|
+| `1`–`6` | dive into that node (the number is in its title) | switch to that node |
+| `space` | dive into the next node now | surface |
+| `p` | hold the dive cycle (freezes timers) | hold / release |
+| `esc` | jack out | surface |
+| `r` | re-breach: every source fetches now | same |
+| `q`, `ctrl-c` | jack out | same |
+
+Any key skips the boot log.
+
+## FX levels
+
+| | calm | active (default) | chaotic |
+|---|---|---|---|
+| Boot log | skipped | ~2.5s | ~3.5s |
+| Decrypt on refresh (changed cells only) | 300ms | 700ms | 1s |
+| Glitch on ICE / TRACE / FLATLINED | — | yes | stronger |
+| Glitch on priority intercept | small | yes | stronger |
+| Unprompted glitches | — | every 20–40s | every 2–6s |
+| Decay static on stale data | — | yes | yes |
+| Hex sparkle in empty space | — | — | yes (10 fps) |
+| Scanlines | yes | yes | yes |
+
+Measured in a release build, demo mode, 40s with a dive every 20s: calm 0.6% CPU,
+active 0.9%, chaotic 1.05% of one core, about 13 MB resident.
 
 ## Architecture
 
 - **Crates:** ratatui 0.30, crossterm (`event-stream`), tokio, reqwest, serde/serde_json,
-  toml, chrono, directories, clap, tracing (to a log file — the TUI owns stdout),
-  fastrand, libc (process CPU for "neural load"). Evaluate `tachyonfx` for effects in
-  M4; hand-roll if it doesn't fit.
+  toml, chrono, chrono-tz, directories, clap, tracing (to a log file — the TUI owns
+  stdout), fastrand, libc (process CPU for "neural load").
+- **Effects are hand-rolled** rather than `tachyonfx`: the core effect decrypts only the
+  cells whose content changed since the last frame (each node keeps a per-cell hash
+  snapshot), which doesn't map onto tachyonfx's cell filters. Every effect is a pure
+  function of cell position and elapsed time, so frames are reproducible in tests.
 - **Concurrency:** one tokio task per source, each on its own interval, reporting over an
   `mpsc` channel to the app loop. The UI never waits on the network. `r` signals every
   source task to re-breach immediately.
@@ -83,8 +120,9 @@ Notable events: price move ≥3%, quake ≥M4 within your radius, Kp ≥5, new K
   JSON parsers are pure functions tested against saved fixtures. `FetchError` maps
   straight onto the fiction: `Failed` → ICE, `RateLimited` → TRACE,
   `NotConfigured` → OFFLINE.
-- **Frame budget:** 30 fps only while an effect is running, 2 fps otherwise. Target <2%
-  CPU on the spare monitor.
+- **Frame budget:** 30 fps only while an effect or radar sweep is running; 10 fps for
+  chaotic mode's sparkle; otherwise one frame a second, aligned to the clock. Target <2%
+  CPU on the spare monitor (met — see FX levels).
 - **`lexicon.rs`:** all in-fiction wording lives in one file so the voice stays
   consistent and tunable.
 - **Disk cache:** last good payload per source, so a restart shows ghost data instantly
@@ -96,11 +134,13 @@ Notable events: price move ≥3%, quake ≥M4 within your radius, Kp ≥5, new K
 
 ```
 src/
-  main.rs  app.rs  event.rs  config.rs  paths.rs  cache.rs  lexicon.rs  theme.rs
-  source.rs  (SourceId / NodeId / link-status model)
-  feeds/   mod.rs (Feed trait + runner) · demo.rs · one file per real source
-  ui/      mod.rs · statusbar.rs · nodes.rs · (breach.rs in M4)
-  fx/      decrypt.rs · glitch.rs · decay.rs · scanline.rs   (M4)
+  main.rs  app.rs  event.rs  config.rs  keys.rs  paths.rs  cache.rs  lexicon.rs  theme.rs
+  source.rs     SourceId / NodeId / link-status model
+  dive.rs       the dive cycle (rotation, priority queue, hold)
+  intercept.rs  priority-intercept detection, with hysteresis
+  feeds/   mod.rs (Feed trait + runner) · http.rs · demo.rs · one file per real source
+  ui/      mod.rs · statusbar.rs · nodes.rs · dive.rs · radar.rs · bigtext.rs · text.rs
+  fx/      mod.rs (engine, tuning per level) · boot.rs · decrypt.rs · glitch.rs · noise.rs
 ```
 
 ## Config
@@ -127,8 +167,8 @@ rss = []
 
 [fx]
 level = "active"     # calm | active | chaotic
-breach_every = "45s"
-breach_hold  = "15s"
+dive_every = "45s"   # old name breach_every still accepted
+dive_hold  = "15s"
 ```
 
 API keys live in `keys.toml` beside the config, never in `config.toml`, so the config
@@ -151,7 +191,7 @@ and never reach the log or the reading cache.
 2. **First feeds end-to-end** — Open-Meteo and USGS, with the full link-status model
    (live / decay / ICE / trace / flatline / offline) and the disk cache.
 3. **Remaining feeds** — CoinGecko, Finnhub, HN + KEV, NOAA SWPC, OpenSky.
-4. **Diegetic layer** — jack-in boot, decrypt/glitch effects, breach cycle, priority
+4. **Diegetic layer** — jack-in boot, decrypt/glitch effects, dive cycle, priority
    intercepts, wording pass.
 5. **Polish** — CPU tuning, small-terminal fallback, 256-color fallback,
    `cargo install`.
@@ -166,7 +206,7 @@ cargo test                   # unit + fixture + render tests
 cargo test live -- --ignored --nocapture   # hits the real APIs and prints the screen
 ```
 
-Keys: `r` re-breach every source now, `q` / `Esc` / `Ctrl-C` jack out. Logs go to
+Keys: see [Keys](#keys). Logs go to
 `~/Library/Caches/ghostwire/ghostwire.log` (level via `GHOSTWIRE_LOG`); cached readings
 live beside it in `readings/`.
 
@@ -191,5 +231,8 @@ live beside it in `readings/`.
   tested against its documented response shape only, pending a real key.
   API keys moved to `keys.toml` (see Config).
   **Open:** RSS/Atom for INTERCEPTS isn't wired (the config key is accepted and ignored).
-- [ ] M4 Diegetic layer
+- [x] M4 Diegetic layer — boot log, changed-cells decrypt, glitch bursts, decay static,
+  scanlines, chaotic sparkle, the dive cycle with six detail views (radar scopes with a
+  sweep for SEISMIC and SKYTRAFFIC, block-font readouts, full-width charts), priority
+  intercepts, and key controls. Effects hand-rolled (see Architecture).
 - [ ] M5 Polish

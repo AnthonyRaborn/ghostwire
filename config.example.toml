@@ -23,5 +23,5 @@ rss = []             # RSS/Atom feed URLs — not wired yet
 
 [fx]
 level = "active"     # calm | active | chaotic
-breach_every = "45s"
-breach_hold = "15s"
+dive_every = "45s"   # how often the rig dives into one node full-screen
+dive_hold = "15s"    # how long each dive lasts

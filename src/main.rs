@@ -2,10 +2,12 @@ mod app;
 mod cache;
 mod config;
 mod cpu;
+mod dive;
 mod event;
 mod feeds;
 mod fx;
 mod geo;
+mod intercept;
 mod keys;
 mod lexicon;
 mod paths;
@@ -17,6 +19,7 @@ mod ui;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -27,6 +30,7 @@ use tracing_subscriber::EnvFilter;
 use app::App;
 use config::{Config, FxLevel};
 use event::Msg;
+use fx::{BootLine, Fx};
 use keys::Keys;
 
 /// Keep one previous log once the current one passes this size.
@@ -101,13 +105,15 @@ async fn main() -> Result<()> {
     if keys_exposed {
         app.warnings.push(lexicon::KEYS_EXPOSED.into());
     }
+    let boot = boot_log(&app, &config_path, &keys, keys_exposed);
+    let mut fx = Fx::new(app.config.fx.level, boot, Instant::now());
 
     let mut terminal = ratatui::init();
     let _ = crossterm::execute!(
         std::io::stdout(),
         crossterm::terminal::SetTitle(lexicon::RIG)
     );
-    let result = run(&mut terminal, &mut app, &mut rx).await;
+    let result = run(&mut terminal, &mut app, &mut fx, &mut rx).await;
     ratatui::restore();
     tracing::info!("jacked out");
     result.with_context(|| format!("see log at {}", log_path.display()))
@@ -116,25 +122,105 @@ async fn main() -> Result<()> {
 async fn run(
     terminal: &mut DefaultTerminal,
     app: &mut App,
+    fx: &mut Fx,
     rx: &mut mpsc::UnboundedReceiver<Msg>,
 ) -> Result<()> {
     loop {
-        terminal.draw(|frame| ui::draw(frame, app))?;
+        let now = Instant::now();
+        fx.on_frame(now, &app.ready_nodes());
+        terminal.draw(|frame| ui::draw(frame, app, fx))?;
+        let wait = app
+            .frame_wait()
+            .min(fx.frame_wait(now, ui::radar_on_screen(app)));
         tokio::select! {
             msg = rx.recv() => match msg {
-                Some(msg) => app.handle(msg),
+                Some(msg) => handle(app, fx, msg),
                 None => return Ok(()),
             },
-            _ = tokio::time::sleep(app.frame_wait()) => {}
+            _ = tokio::time::sleep(wait) => {}
         }
         while let Ok(msg) = rx.try_recv() {
-            app.handle(msg);
+            handle(app, fx, msg);
         }
-        app.on_tick();
+        let now = Instant::now();
+        app.on_tick(now);
+        fx.absorb(app.take_signals(), now);
         if app.should_quit {
             return Ok(());
         }
     }
+}
+
+/// Any key during the boot log skips it; after that, keys go to the app.
+fn handle(app: &mut App, fx: &mut Fx, msg: Msg) {
+    let now = Instant::now();
+    match msg {
+        Msg::Key(_) if fx.booting(now) => fx.skip_boot(now),
+        msg => app.handle(msg),
+    }
+}
+
+/// The jack-in log: facts about this run, in the rig's voice.
+fn boot_log(app: &App, config_path: &Path, keys: &Keys, keys_exposed: bool) -> Vec<BootLine> {
+    let home = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf());
+    let short = |path: &Path| match home.as_ref().and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => path.display().to_string(),
+    };
+    let sector = &app.config.sector;
+    let mut lines = vec![BootLine::new(
+        "config",
+        if app.config_found {
+            short(config_path)
+        } else {
+            "none found, running on defaults".into()
+        },
+    )];
+    if app.demo {
+        lines.push(BootLine::new("construct", "simulated feeds, no network"));
+    }
+    lines.push(BootLine::new(
+        "sector",
+        match sector.fix() {
+            Some((lat, lon)) => format!("{} at {lat:.2}, {lon:.2}", sector.name),
+            None => format!("{}, no fix: ATMOS and SKYTRAFFIC dark", sector.name),
+        },
+    ));
+    let mark = |present: bool| if present { "✓" } else { "—" };
+    let mut key_line = format!(
+        "finnhub {}  coingecko {}",
+        mark(keys.finnhub().is_some()),
+        mark(keys.coingecko().is_some())
+    );
+    if keys_exposed {
+        key_line.push_str("  EXPOSED");
+    }
+    lines.push(BootLine::new("keys", key_line));
+    let ghosts = app
+        .sources
+        .values()
+        .filter(|s| s.link == source::Link::Ghost)
+        .count();
+    lines.push(BootLine::new(
+        "ghost cache",
+        match ghosts {
+            0 => "cold".to_string(),
+            n => format!("{n} readings"),
+        },
+    ));
+    lines.push(BootLine::new(
+        "node discovery",
+        format!(
+            "{} nodes, {} sources",
+            source::NodeId::ALL.len(),
+            app.sources.len()
+        ),
+    ));
+    lines.push(BootLine::new(
+        "fx",
+        format!("{:?}", app.config.fx.level).to_lowercase(),
+    ));
+    lines
 }
 
 /// Running without a cache only costs the instant ghost display on the next start.

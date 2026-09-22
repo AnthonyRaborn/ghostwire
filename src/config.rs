@@ -82,18 +82,18 @@ pub struct Intercepts {
 #[serde(default, deny_unknown_fields)]
 pub struct Fx {
     pub level: FxLevel,
-    #[serde(deserialize_with = "de_duration")]
-    pub breach_every: Duration,
-    #[serde(deserialize_with = "de_duration")]
-    pub breach_hold: Duration,
+    #[serde(deserialize_with = "de_duration", alias = "breach_every")]
+    pub dive_every: Duration,
+    #[serde(deserialize_with = "de_duration", alias = "breach_hold")]
+    pub dive_hold: Duration,
 }
 
 impl Default for Fx {
     fn default() -> Self {
         Self {
             level: FxLevel::Active,
-            breach_every: Duration::from_secs(45),
-            breach_hold: Duration::from_secs(15),
+            dive_every: Duration::from_secs(45),
+            dive_hold: Duration::from_secs(15),
         }
     }
 }
@@ -146,8 +146,8 @@ impl Config {
         if s.radius_km <= 0.0 || s.flight_radius_km <= 0.0 {
             bail!("[sector] radius_km and flight_radius_km must be positive");
         }
-        if self.fx.breach_hold >= self.fx.breach_every {
-            bail!("[fx] breach_hold must be shorter than breach_every");
+        if self.fx.dive_hold >= self.fx.dive_every {
+            bail!("[fx] dive_hold must be shorter than dive_every");
         }
         Ok(())
     }
@@ -183,7 +183,7 @@ mod tests {
     fn example_config_parses() {
         let config = Config::parse(EXAMPLE).unwrap();
         assert_eq!(config.sector.name, "SECTOR-4");
-        assert_eq!(config.fx.breach_every, Duration::from_secs(45));
+        assert_eq!(config.fx.dive_every, Duration::from_secs(45));
         assert!(config.sector.fix().is_none());
     }
 
@@ -192,6 +192,13 @@ mod tests {
         let config = Config::parse("").unwrap();
         assert_eq!(config.sector.radius_km, 300.0);
         assert_eq!(config.fx.level, FxLevel::Active);
+    }
+
+    #[test]
+    fn accepts_the_old_breach_names() {
+        let config = Config::parse("[fx]\nbreach_every = \"60s\"\nbreach_hold = \"20s\"").unwrap();
+        assert_eq!(config.fx.dive_every, Duration::from_secs(60));
+        assert_eq!(config.fx.dive_hold, Duration::from_secs(20));
     }
 
     #[test]

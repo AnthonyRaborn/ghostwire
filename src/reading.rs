@@ -61,6 +61,9 @@ pub struct Vuln {
     pub cve: String,
     pub vendor: String,
     pub product: String,
+    /// CISA's name for it, e.g. "Zyxel GS1900 Series Switches Stack-Based Buffer Overflow".
+    #[serde(default)]
+    pub name: String,
     pub added: NaiveDate,
     pub ransomware: bool,
 }

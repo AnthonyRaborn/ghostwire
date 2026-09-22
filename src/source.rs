@@ -62,6 +62,13 @@ impl SourceId {
         SourceId::OpenSky,
     ];
 
+    pub fn node(self) -> NodeId {
+        NodeId::ALL
+            .into_iter()
+            .find(|n| n.sources().contains(&self))
+            .expect("every source belongs to a node")
+    }
+
     /// The upstream service's name, as shown in the footer ticker.
     pub fn handle(self) -> &'static str {
         match self {

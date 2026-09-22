@@ -44,6 +44,7 @@ struct Entry {
     cve_id: String,
     vendor_project: String,
     product: String,
+    vulnerability_name: Option<String>,
     date_added: NaiveDate,
     known_ransomware_campaign_use: Option<String>,
 }
@@ -60,6 +61,7 @@ pub fn parse(text: &str) -> Result<Vec<Vuln>, String> {
             cve: e.cve_id,
             vendor: e.vendor_project,
             product: e.product,
+            name: e.vulnerability_name.unwrap_or_default(),
             added: e.date_added,
             ransomware: e.known_ransomware_campaign_use.as_deref() == Some("Known"),
         })
@@ -79,6 +81,7 @@ mod tests {
         let first = &vulns[0];
         assert_eq!(first.cve, "CVE-2026-7273");
         assert_eq!(first.vendor, "Zyxel");
+        assert!(!first.name.is_empty());
         assert_eq!(first.added, NaiveDate::from_ymd_opt(2026, 9, 21).unwrap());
         assert!(vulns.windows(2).all(|w| w[0].added >= w[1].added));
     }

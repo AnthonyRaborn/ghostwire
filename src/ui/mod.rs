@@ -1,6 +1,11 @@
+mod bigtext;
+mod dive;
 mod nodes;
+mod radar;
 mod statusbar;
 pub mod text;
+
+use std::time::Instant;
 
 use chrono::Utc;
 use ratatui::Frame;
@@ -10,18 +15,25 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph};
 
 use crate::app::App;
+use crate::fx::Fx;
 use crate::source::NodeId;
 use crate::{lexicon, theme};
 
 const MIN_W: u16 = 60;
 const MIN_H: u16 = 14;
 
-pub fn draw(frame: &mut Frame, app: &App) {
+pub fn draw(frame: &mut Frame, app: &App, fx: &mut Fx) {
     let area = frame.area();
+    let instant = Instant::now();
     frame.render_widget(
         Block::new().style(Style::new().bg(theme::BG).fg(theme::TEXT)),
         area,
     );
+    if fx.booting(instant) {
+        fx.draw_boot(frame, instant);
+        fx.screen(frame.buffer_mut(), area);
+        return;
+    }
     if area.width < MIN_W || area.height < MIN_H {
         let [_, middle, _] = Layout::vertical([
             Constraint::Fill(1),
@@ -45,10 +57,21 @@ pub fn draw(frame: &mut Frame, app: &App) {
     .areas(area);
     let now = Utc::now();
     statusbar::draw_top(frame, top, app);
-    for (node, cell) in NodeId::ALL.into_iter().zip(grid_cells(grid)) {
-        nodes::draw(frame, cell, app, node, now);
+    match app.dive.diving() {
+        Some(node) => dive::draw(frame, grid, app, node, now, instant, fx),
+        None => {
+            for (node, cell) in NodeId::ALL.into_iter().zip(grid_cells(grid)) {
+                nodes::draw(frame, cell, app, node, now, instant, fx);
+            }
+        }
     }
     statusbar::draw_ticker(frame, bottom, app);
+    fx.screen(frame.buffer_mut(), area);
+}
+
+/// Whether the screen shows a radar, whose sweep needs a steady frame rate.
+pub fn radar_on_screen(app: &App) -> bool {
+    matches!(app.dive.diving(), Some(NodeId::Seismic | NodeId::Sky))
 }
 
 /// Three across when there's room (or when the screen is short); two across otherwise.
@@ -122,7 +145,9 @@ mod tests {
 
     fn render(app: &App, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal.draw(|frame| draw(frame, app)).unwrap();
+        // Calm has no boot, and no effect runs without a signal, so frames are stable.
+        let mut fx = Fx::new(crate::config::FxLevel::Calm, Vec::new(), Instant::now());
+        terminal.draw(|frame| draw(frame, app, &mut fx)).unwrap();
         let buf = terminal.backend().buffer();
         (0..height)
             .map(|y| (0..width).map(|x| buf[(x, y)].symbol()).collect::<String>())
@@ -232,6 +257,37 @@ mod tests {
                 assert_eq!(state.link, Link::Live, "{id:?}: {:?}", state.last_error);
             }
         }
+    }
+
+    #[test]
+    fn every_node_dives() {
+        let expected = [
+            (NodeId::Zaibatsu, "CRYPTO // 7 DAYS"),
+            (NodeId::Atmos, "NEXT 24H //"),
+            (NodeId::Intercepts, "HACKER NEWS // FRONT PAGE"),
+            (NodeId::Seismic, "EVENTS // NEARBY 7 DAYS"),
+            (NodeId::Helios, "Kp // LAST 72H"),
+            (NodeId::Sky, "CONTACTS //"),
+        ];
+        for (node, marker) in expected {
+            let mut app = demo_app();
+            app.dive.dive_now(node, Instant::now());
+            let screen = render(&app, 132, 34);
+            println!("{screen}\n");
+            assert!(screen.contains("◢ DIVE //"), "{node:?}");
+            assert!(screen.contains(marker), "{node:?} missing {marker:?}");
+            assert!(screen.contains("[esc] surface"), "{node:?}");
+        }
+    }
+
+    #[test]
+    fn ticker_announces_the_next_dive() {
+        let screen = render(&demo_app(), 132, 30);
+        assert!(
+            screen.contains("» diving ZAIBATSU INDEX in 30s"),
+            "{screen}"
+        );
+        assert!(screen.contains("1·ZAIBATSU INDEX"));
     }
 
     #[test]

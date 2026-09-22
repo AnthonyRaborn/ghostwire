@@ -60,6 +60,15 @@ pub fn draw_top(frame: &mut Frame, area: Rect, app: &App) {
 pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
     let now = Instant::now();
     let mut items = Vec::new();
+    if let Some(intercept) = app.live_intercept(now) {
+        items.push(Span::styled(
+            lexicon::intercept(
+                &lexicon::node_title(intercept.node, &app.config.sector.name),
+                &intercept.text,
+            ),
+            Style::new().fg(theme::MAGENTA).add_modifier(Modifier::BOLD),
+        ));
+    }
     if !app.config_found && !app.demo {
         items.push(Span::styled(
             lexicon::NO_CONFIG,
@@ -102,6 +111,9 @@ pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
             Style::new().fg(theme::GREEN),
         ));
     }
+    if let Some(text) = dive_status(app, now) {
+        items.push(Span::styled(text, Style::new().fg(theme::CYAN)));
+    }
     let mut left = vec![Span::raw(" ")];
     for (i, item) in items.into_iter().enumerate() {
         if i > 0 {
@@ -109,9 +121,29 @@ pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
         }
         left.push(item);
     }
-    let keys = Span::styled(format!("{} ", lexicon::KEYS), Style::new().fg(theme::MUTED));
+    let keys = if app.dive.diving().is_some() {
+        lexicon::KEYS_DIVE
+    } else {
+        lexicon::KEYS_GRID
+    };
+    let keys = Span::styled(format!("{keys} "), Style::new().fg(theme::MUTED));
     frame.render_widget(
         Paragraph::new(row(left, vec![keys], area.width as usize)),
         area,
     );
+}
+
+/// What the dive cycle will do next, if there's anything to dive into.
+fn dive_status(app: &App, now: Instant) -> Option<String> {
+    if app.dive.held() {
+        return Some(lexicon::DIVE_HELD.into());
+    }
+    let secs = app.dive.next_in(now)?.as_secs_f32().ceil() as u64;
+    if app.dive.diving().is_some() {
+        return Some(lexicon::surfacing_in(secs));
+    }
+    let ready = app.ready_nodes();
+    let next = app.dive.peek(|n| ready.contains(&n))?;
+    let title = lexicon::node_title(next, &app.config.sector.name);
+    Some(lexicon::diving_in(&title, secs))
 }

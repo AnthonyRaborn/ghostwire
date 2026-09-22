@@ -54,6 +54,14 @@ const KEV_TARGETS: &[(&str, &str)] = &[
     ("Sable", "Hypervisor"),
 ];
 
+const KEV_FLAWS: &[&str] = &[
+    "Command Injection Vulnerability",
+    "Authentication Bypass Vulnerability",
+    "Path Traversal Vulnerability",
+    "Use-After-Free Vulnerability",
+    "Deserialization of Untrusted Data Vulnerability",
+];
+
 const FAR_PLACES: &[&str] = &[
     "Tonga Islands",
     "Kuril Islands",
@@ -356,6 +364,7 @@ fn new_vuln(rng: &mut Rng, added: chrono::NaiveDate) -> Vuln {
         cve: format!("CVE-2026-{}", rng.u32(10_000..60_000)),
         vendor: vendor.to_string(),
         product: product.to_string(),
+        name: format!("{vendor} {product} {}", pick(rng, KEV_FLAWS)),
         added,
         ransomware: rng.f64() < 0.2,
     }

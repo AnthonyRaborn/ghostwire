@@ -14,6 +14,9 @@ pub const ORANGE: Color = Color::Rgb(255, 140, 0);
 pub const GREEN: Color = Color::Rgb(5, 255, 161);
 pub const RED: Color = Color::Rgb(255, 60, 60);
 pub const GHOST: Color = Color::Rgb(150, 130, 255);
+/// Every other row's background.
+pub const SCANLINE: Color = Color::Rgb(11, 12, 22);
+pub const RADAR_TRAIL: Color = Color::Rgb(0, 120, 80);
 
 /// Foreground for a link's label and ticker text.
 pub fn link_color(link: &Link) -> Color {
