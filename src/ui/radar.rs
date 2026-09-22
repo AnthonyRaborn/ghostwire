@@ -26,6 +26,18 @@ pub struct Blip {
     pub label: Option<String>,
 }
 
+/// A filled pie slice from the center out to `r` — a region of intensity rather than a
+/// single point, for a source (like the precip nowcast) where "how much" matters as
+/// much as "when." Wedges are drawn largest-`r`-first so a farther, wider wedge forms
+/// the outer band around a nearer, narrower one instead of hiding it.
+pub struct Wedge {
+    pub r: f64,
+    pub bearing: f64,
+    pub half_width_deg: f64,
+    pub color: Color,
+    pub label: Option<String>,
+}
+
 /// Sweep angle for a wall-clock time, in degrees clockwise from north.
 pub fn sweep_at(ms: i64) -> f64 {
     ms.rem_euclid(SWEEP_PERIOD_MS) as f64 / SWEEP_PERIOD_MS as f64 * 360.0
@@ -50,15 +62,26 @@ fn scope_area(area: Rect) -> Rect {
     scope
 }
 
-pub fn draw(
-    frame: &mut Frame,
-    area: Rect,
-    range: f64,
-    blips: &[Blip],
-    sweep: f64,
-    range_label: &str,
-    empty_note: Option<&str>,
-) {
+/// Everything a scope shows besides its position on screen.
+#[derive(Clone, Copy)]
+pub struct Scope<'a> {
+    pub range: f64,
+    pub blips: &'a [Blip],
+    pub wedges: &'a [Wedge],
+    pub sweep: f64,
+    pub range_label: &'a str,
+    pub empty_note: Option<&'a str>,
+}
+
+pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
+    let Scope {
+        range,
+        blips,
+        wedges,
+        sweep,
+        range_label,
+        empty_note,
+    } = *scope;
     let scope = scope_area(area);
     let r = range;
     let point = |d: f64, deg: f64| {
@@ -81,6 +104,20 @@ pub fn draw(
             }
             ctx.draw(&CanvasLine::new(-r, 0.0, r, 0.0, theme::DIM));
             ctx.draw(&CanvasLine::new(0.0, -r, 0.0, r, theme::DIM));
+            // Farthest first, so a nearer/narrower wedge's color shows through its own
+            // ring instead of being painted over by a farther one drawn on top.
+            let mut by_radius: Vec<&Wedge> = wedges.iter().filter(|w| w.r <= r).collect();
+            by_radius.sort_by(|a, b| b.r.total_cmp(&a.r));
+            for wedge in by_radius {
+                let spokes = ((wedge.half_width_deg * 2.0) / 3.0).ceil().clamp(4.0, 24.0) as usize;
+                for i in 0..=spokes {
+                    let t = i as f64 / spokes as f64;
+                    let deg =
+                        wedge.bearing - wedge.half_width_deg + t * (wedge.half_width_deg * 2.0);
+                    let (x, y) = point(wedge.r, deg);
+                    ctx.draw(&CanvasLine::new(0.0, 0.0, x, y, wedge.color));
+                }
+            }
             for (lag, color) in [
                 (0.0, theme::GREEN),
                 (4.0, theme::RADAR_TRAIL),
@@ -107,6 +144,16 @@ pub fn draw(
                     -r * 0.25,
                     Span::styled(note.to_string(), Style::new().fg(theme::MUTED)),
                 );
+            }
+            for wedge in wedges.iter().filter(|w| w.r <= r) {
+                if let Some(label) = &wedge.label {
+                    let (x, y) = point(wedge.r, wedge.bearing);
+                    ctx.print(
+                        x,
+                        y,
+                        Span::styled(label.clone(), Style::new().fg(theme::TEXT)),
+                    );
+                }
             }
             for blip in blips.iter().filter(|b| b.r <= r) {
                 let (x, y) = point(blip.r, blip.bearing);

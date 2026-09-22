@@ -537,45 +537,43 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
             legend_spans.push(label(" · "));
         }
         legend_spans.push(Span::styled(
-            format!("+{}h {:.0}%", i + 1, p.prob),
+            format!("+{}h {:.0}% {:.1}mm", i + 1, p.prob, p.mm),
             Style::new().fg(precip_color(p.prob)),
         ));
     }
     frame.render_widget(Paragraph::new(Line::from(legend_spans)), legend);
 
     let hours = w.precip_next.len() as f64;
-    let blips: Vec<radar::Blip> = w
+    // A filled wedge per hour, all on the wind bearing (still the one honest spatial
+    // fact available), widening with chance of rain so "how much" reads as a bigger
+    // patch of color, not just a bigger dot. Drawn farthest-hour-first, so they stack
+    // into concentric bands rather than one hour's ring hiding another's.
+    let wedges: Vec<radar::Wedge> = w
         .precip_next
         .iter()
         .enumerate()
-        .map(|(i, p)| radar::Blip {
+        .filter(|(_, p)| p.prob >= 10.0)
+        .map(|(i, p)| radar::Wedge {
             r: i as f64 + 1.0,
             bearing: w.wind_from,
-            glyph: precip_glyph(p.mm).into(),
+            half_width_deg: 6.0 + (p.prob / 100.0) * 34.0,
             color: precip_color(p.prob),
-            label: None,
+            label: Some(format!("+{}h", i + 1)),
         })
         .collect();
-    let clear = w.precip_next.iter().all(|p| p.prob < 10.0);
-    let note = clear.then_some("NOTHING INCOMING");
+    let note = wedges.is_empty().then_some("NOTHING INCOMING");
     radar::draw(
         frame,
         scope,
-        hours,
-        &blips,
-        sweep(),
-        &format!("+{hours:.0}h"),
-        note,
+        &radar::Scope {
+            range: hours,
+            blips: &[],
+            wedges: &wedges,
+            sweep: sweep(),
+            range_label: &format!("+{hours:.0}h"),
+            empty_note: note,
+        },
     );
-}
-
-fn precip_glyph(mm: f64) -> char {
-    match mm {
-        m if m < 0.1 => '·',
-        m if m < 0.5 => '•',
-        m if m < 2.0 => '●',
-        _ => '◉',
-    }
 }
 
 fn precip_color(prob: f64) -> Color {
@@ -803,11 +801,14 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     radar::draw(
         frame,
         scope,
-        sector.radius_km,
-        &blips,
-        sweep(),
-        &distance(sector.radius_km, sector.units),
-        note,
+        &radar::Scope {
+            range: sector.radius_km,
+            blips: &blips,
+            wedges: &[],
+            sweep: sweep(),
+            range_label: &distance(sector.radius_km, sector.units),
+            empty_note: note,
+        },
     );
 
     let width = list.width as usize;
@@ -1003,11 +1004,14 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
     radar::draw(
         frame,
         scope,
-        sector.flight_radius_km,
-        &blips,
-        sweep(),
-        &distance(sector.flight_radius_km, sector.units),
-        None,
+        &radar::Scope {
+            range: sector.flight_radius_km,
+            blips: &blips,
+            wedges: &[],
+            sweep: sweep(),
+            range_label: &distance(sector.flight_radius_km, sector.units),
+            empty_note: None,
+        },
     );
 
     let width = list.width as usize;
