@@ -6,10 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- The ATMOS tile's 24-hour temperature sparkline is yellow, matching the dive chart.
-
 ## [1.0.0] — ZERO-DAY
 
 First release.
