@@ -39,9 +39,52 @@ fn lit(lat: f64, lon: f64, subsolar: (f64, f64)) -> bool {
     cos_zenith > 0.0
 }
 
-/// A `cols`×`rows` equirectangular sketch, day cells lit, night cells dim, with the
-/// sector's fix (if any) marked. `cols` should run roughly 4x `rows` to read as a map —
-/// 360°/180° of lon/lat is 2:1, and terminal cells are about twice as tall as wide.
+/// One box in a rough landmass silhouette: a lat/lon rectangle, `(lat_min, lat_max,
+/// lon_min, lon_max)`.
+type LandBox = (f64, f64, f64, f64);
+
+/// A coarse approximation of the continents as a handful of boxes — not real
+/// coastlines, just enough shape (a taper here, a peninsula there) to read as "that's
+/// Africa" at a few dozen columns wide. Antarctica's ice cap is included since a blank
+/// bottom edge would look like a rendering bug rather than open ocean.
+const LANDMASSES: &[LandBox] = &[
+    // North America — main mass, tapering down through Central America.
+    (25.0, 72.0, -168.0, -52.0),
+    (8.0, 25.0, -105.0, -77.0),
+    // Greenland.
+    (60.0, 83.0, -55.0, -20.0),
+    // South America — wide in the north, narrowing toward Patagonia.
+    (-20.0, 12.0, -82.0, -34.0),
+    (-56.0, -20.0, -75.0, -63.0),
+    // Europe.
+    (36.0, 71.0, -10.0, 40.0),
+    // Africa — narrowing toward the Cape.
+    (-10.0, 37.0, -18.0, 52.0),
+    (-35.0, -10.0, 10.0, 33.0),
+    // Asia, with the Indian subcontinent and Southeast Asia as separate lobes so the
+    // main box can stay a simple rectangle.
+    (30.0, 78.0, 40.0, 180.0),
+    (5.0, 30.0, 68.0, 100.0),
+    (-10.0, 20.0, 92.0, 140.0),
+    // Australia.
+    (-44.0, -10.0, 112.0, 154.0),
+    // Antarctica.
+    (-90.0, -60.0, -180.0, 180.0),
+];
+
+/// Whether `(lat, lon)` falls inside the rough landmass sketch above.
+fn is_land(lat: f64, lon: f64) -> bool {
+    LANDMASSES
+        .iter()
+        .any(|&(lat_min, lat_max, lon_min, lon_max)| {
+            lat >= lat_min && lat <= lat_max && lon >= lon_min && lon <= lon_max
+        })
+}
+
+/// A `cols`×`rows` equirectangular sketch: lit/dark for day and night, land drawn
+/// heavier than ocean in both, with the sector's fix (if any) marked. `cols` should run
+/// roughly 4x `rows` to read as a map — 360°/180° of lon/lat is 2:1, and terminal cells
+/// are about twice as tall as wide.
 pub fn render(cols: usize, rows: usize, now: DateTime<Utc>, sector: Option<(f64, f64)>) -> Vec<Line<'static>> {
     if cols == 0 || rows == 0 {
         return Vec::new();
@@ -59,11 +102,13 @@ pub fn render(cols: usize, rows: usize, now: DateTime<Utc>, sector: Option<(f64,
                         (lat - slat).abs() < lat_step && (lon - slon).abs() < lon_step
                     });
                     if on_sector {
-                        Span::styled("◆", Style::new().fg(theme::MAGENTA))
-                    } else if lit(lat, lon, sun) {
-                        Span::styled("·", Style::new().fg(theme::YELLOW))
-                    } else {
-                        Span::raw(" ")
+                        return Span::styled("◆", Style::new().fg(theme::MAGENTA));
+                    }
+                    match (lit(lat, lon, sun), is_land(lat, lon)) {
+                        (true, true) => Span::styled("▓", Style::new().fg(theme::GREEN)),
+                        (true, false) => Span::styled("·", Style::new().fg(theme::CYAN)),
+                        (false, true) => Span::styled("·", Style::new().fg(theme::MUTED)),
+                        (false, false) => Span::raw(" "),
                     }
                 })
                 .collect();
@@ -112,6 +157,18 @@ mod tests {
         let (lat, lon) = subsolar(now);
         let antipode = (-lat, ((lon + 180.0 + 180.0).rem_euclid(360.0)) - 180.0);
         assert!(!lit(antipode.0, antipode.1, subsolar(now)));
+    }
+
+    #[test]
+    fn spot_checks_land_and_ocean() {
+        assert!(is_land(39.0, -98.0), "Kansas"); // continental US
+        assert!(is_land(51.5, -0.1), "London");
+        assert!(is_land(-33.9, 151.2), "Sydney");
+        assert!(is_land(35.7, 139.7), "Tokyo");
+        assert!(is_land(-75.0, 0.0), "Antarctica");
+        assert!(!is_land(0.0, -140.0), "mid Pacific");
+        assert!(!is_land(-30.0, -20.0), "mid South Atlantic");
+        assert!(!is_land(20.0, 65.0), "Arabian Sea");
     }
 
     #[test]
