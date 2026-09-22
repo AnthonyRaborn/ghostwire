@@ -3,7 +3,6 @@
 use crate::source::{Link, NodeId};
 
 pub const RIG: &str = "GHOSTWIRE";
-pub const RIG_ID: &str = "RIG-07";
 /// This release's codename — hacker slang for "day one," which v1.0.0 is.
 pub const CODENAME: &str = "ZERO-DAY";
 pub const CONSTRUCT: &str = "CONSTRUCT // SIMULATED FEEDS";

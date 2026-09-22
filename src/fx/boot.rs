@@ -69,14 +69,14 @@ impl Boot {
         self.skipped_at.get_or_insert(now);
     }
 
-    pub fn draw(&self, frame: &mut Frame, area: Rect, now: Instant, ms: u64) {
+    pub fn draw(&self, frame: &mut Frame, area: Rect, now: Instant, ms: u64, rig_id: &str) {
         let elapsed = now.saturating_duration_since(self.start);
         let mut texts: Vec<(String, Style)> = vec![(
             format!(
                 "{} // {} // {} · v{}",
                 lexicon::RIG,
                 lexicon::CODENAME,
-                lexicon::RIG_ID,
+                rig_id,
                 env!("CARGO_PKG_VERSION")
             ),
             Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
@@ -163,7 +163,9 @@ mod tests {
 
     fn screen(boot: &Boot, at: Instant) -> String {
         let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
-        terminal.draw(|f| boot.draw(f, f.area(), at, 0)).unwrap();
+        terminal
+            .draw(|f| boot.draw(f, f.area(), at, 0, "RIG-07"))
+            .unwrap();
         let buf = terminal.backend().buffer();
         (0..12)
             .map(|y| (0..80).map(|x| buf[(x, y)].symbol()).collect::<String>())

@@ -156,6 +156,10 @@ src/
 whichever already exists.
 
 ```toml
+[rig]
+shortname = "rig"    # rig | deck | jack | wire | node | core | link | stack | host | grid
+number = 7           # always shown as two digits — "RIG-07"
+
 [sector]
 name = "SECTOR-4"
 lat = 0.0            # your coordinates — required for ATMOS, SEISMIC radius, SKYTRAFFIC
@@ -321,3 +325,8 @@ live beside it in `readings/`.
   Deliberately doesn't show the rig's public IP on screen (an ambient always-visible
   display is exactly the wrong place for that), even though Cloudflare's trace response
   includes it — only latency and colo make it into `LinkHealth`.
+- [x] `[rig]` naming — `RIG-07` was hardcoded; it's now `shortname-number` (e.g.
+  `DECK-03`), configurable via a new `[rig]` table (`shortname` from a fixed thematic
+  set — rig, deck, jack, wire, node, core, link, stack, host, grid — and `number`,
+  validated 0-99 so it's always shown as two digits). Threaded through to both places
+  the ID appears: the status bar and the boot/jack-in screen.

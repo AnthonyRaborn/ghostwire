@@ -31,7 +31,7 @@ pub fn draw(frame: &mut Frame, app: &App, fx: &mut Fx) {
         area,
     );
     if fx.booting(instant) {
-        fx.draw_boot(frame, instant);
+        fx.draw_boot(frame, instant, &app.config.rig.id());
         fx.screen(frame.buffer_mut(), area);
         return;
     }

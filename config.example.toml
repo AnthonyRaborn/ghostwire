@@ -1,6 +1,13 @@
 # GHOSTWIRE config. Every field is optional; anything left out uses the default.
 # API keys don't go here; they go in keys.toml, so this file is safe to share.
 
+[rig]
+# How the rig names itself, shown as "SHORTNAME-NN" (e.g. "DECK-03") in the status bar
+# and boot log. shortname: rig | deck | jack | wire | node | core | link | stack |
+# host | grid. number is always shown as two digits, so it must be 0-99.
+shortname = "rig"
+number = 7
+
 [sector]
 name = "SECTOR-4"
 # Your coordinates. ATMOS, the SEISMIC radius, and SKYTRAFFIC stay offline until set.

@@ -148,9 +148,9 @@ impl Fx {
         }
     }
 
-    pub fn draw_boot(&self, frame: &mut Frame, now: Instant) {
+    pub fn draw_boot(&self, frame: &mut Frame, now: Instant, rig_id: &str) {
         if let Some(boot) = &self.boot {
-            boot.draw(frame, frame.area(), now, self.ms(now));
+            boot.draw(frame, frame.area(), now, self.ms(now), rig_id);
         }
     }
 

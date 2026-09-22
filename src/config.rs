@@ -9,10 +9,68 @@ pub const EXAMPLE: &str = include_str!("../config.example.toml");
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub rig: Rig,
     pub sector: Sector,
     pub zaibatsu: Zaibatsu,
     pub intercepts: Intercepts,
     pub fx: Fx,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Rig {
+    pub shortname: RigShortname,
+    /// Always shown as two digits, so this must be 0-99.
+    pub number: u8,
+}
+
+impl Default for Rig {
+    fn default() -> Self {
+        Self {
+            shortname: RigShortname::Rig,
+            number: 7,
+        }
+    }
+}
+
+impl Rig {
+    /// The rig's ID as shown on screen, e.g. `"RIG-07"`.
+    pub fn id(&self) -> String {
+        format!("{}-{:02}", self.shortname.as_str(), self.number)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RigShortname {
+    #[default]
+    Rig,
+    Deck,
+    Jack,
+    Wire,
+    Node,
+    Core,
+    Link,
+    Stack,
+    Host,
+    Grid,
+}
+
+impl RigShortname {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rig => "RIG",
+            Self::Deck => "DECK",
+            Self::Jack => "JACK",
+            Self::Wire => "WIRE",
+            Self::Node => "NODE",
+            Self::Core => "CORE",
+            Self::Link => "LINK",
+            Self::Stack => "STACK",
+            Self::Host => "HOST",
+            Self::Grid => "GRID",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -146,6 +204,9 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        if self.rig.number > 99 {
+            bail!("[rig] number {} must be 0-99, shown as two digits", self.rig.number);
+        }
         let s = &self.sector;
         if s.lat.is_some() != s.lon.is_some() {
             bail!("[sector] needs both lat and lon, or neither");
@@ -218,6 +279,23 @@ mod tests {
         assert_eq!(config.fx.level, FxLevel::Active);
         assert!(config.intercepts.hn);
         assert!(config.intercepts.kev);
+        assert_eq!(config.rig.id(), "RIG-07");
+    }
+
+    #[test]
+    fn rig_id_is_always_two_digits() {
+        let config = Config::parse("[rig]\nshortname = \"deck\"\nnumber = 3").unwrap();
+        assert_eq!(config.rig.id(), "DECK-03");
+    }
+
+    #[test]
+    fn rejects_a_rig_number_over_99() {
+        assert!(Config::parse("[rig]\nnumber = 100").is_err());
+    }
+
+    #[test]
+    fn rejects_an_unknown_shortname() {
+        assert!(Config::parse("[rig]\nshortname = \"terminal\"").is_err());
     }
 
     #[test]
