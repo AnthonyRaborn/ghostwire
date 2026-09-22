@@ -13,8 +13,8 @@ use super::{Feed, FetchError};
 use crate::config::{Config, Units};
 use crate::geo;
 use crate::reading::{
-    Contact, Headline, PrecipHour, Quake, Quote, Reading, Satellite, Scales, SpaceWeather, Story,
-    Vuln, Weather,
+    Contact, CountryOutages, Headline, LinkHealth, OutageAlert, PrecipHour, Quake, Quote, Reading,
+    Satellite, Scales, SpaceWeather, Story, Vuln, Weather,
 };
 use crate::source::SourceId;
 
@@ -179,6 +179,23 @@ impl DemoFeed {
             (SourceId::Orbit, _) => Reading::Orbit(orbit(None, rng)),
             (SourceId::Rss, Some(Reading::Rss(h))) => Reading::Rss(rss(h.clone(), rng)),
             (SourceId::Rss, _) => Reading::Rss(rss(Vec::new(), rng)),
+            (SourceId::Ioda, Some(Reading::Ioda(o))) => Reading::Ioda(ioda(o.clone(), rng)),
+            (SourceId::Ioda, _) => Reading::Ioda(ioda(
+                CountryOutages {
+                    country: "US".into(),
+                    alerts: Vec::new(),
+                },
+                rng,
+            )),
+            (SourceId::Uplink, Some(Reading::Uplink(u))) => Reading::Uplink(uplink(u.clone(), rng)),
+            (SourceId::Uplink, _) => Reading::Uplink(uplink(
+                LinkHealth {
+                    latency_ms: 20.0,
+                    colo: "SJC".into(),
+                    history: Vec::new(),
+                },
+                rng,
+            )),
         }
     }
 }
@@ -415,6 +432,40 @@ fn new_headline(rng: &mut Rng, published: chrono::DateTime<Utc>) -> Headline {
         link: None,
         published: Some(published),
     }
+}
+
+const OUTAGE_DATASOURCES: &[&str] = &["bgp", "ping-slash24", "gtr"];
+const OUTAGE_LEVELS: &[&str] = &["warning", "critical"];
+const COLOS: &[&str] = &["SJC", "MIA", "ORD", "DFW", "SEA", "IAD"];
+
+/// Alerts are rare, so this mostly stays quiet: a small chance of one landing, and
+/// stale ones (over 3h) age out just like the real window would drop them.
+fn ioda(mut outages: CountryOutages, rng: &mut Rng) -> CountryOutages {
+    let now = Utc::now();
+    outages.alerts.retain(|a| (now - a.time).num_hours() < 3);
+    if rng.f64() < 0.04 {
+        outages.alerts.insert(
+            0,
+            OutageAlert {
+                datasource: pick(rng, OUTAGE_DATASOURCES).to_string(),
+                level: pick(rng, OUTAGE_LEVELS).to_string(),
+                time: now,
+            },
+        );
+    }
+    outages
+}
+
+fn uplink(mut link: LinkHealth, rng: &mut Rng) -> LinkHealth {
+    link.latency_ms = (link.latency_ms + jitter(rng) * 4.0).clamp(8.0, 220.0);
+    if rng.f64() < 0.03 {
+        link.colo = pick(rng, COLOS).to_string();
+    }
+    link.history.push(link.latency_ms);
+    if link.history.len() > 30 {
+        link.history.remove(0);
+    }
+    link
 }
 
 fn kev(mut vulns: Vec<Vuln>, rng: &mut Rng) -> Vec<Vuln> {

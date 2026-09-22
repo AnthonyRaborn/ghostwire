@@ -17,6 +17,8 @@ pub enum Reading {
     OpenSky(Vec<Contact>),
     Orbit(Vec<Satellite>),
     Rss(Vec<Headline>),
+    Ioda(CountryOutages),
+    Uplink(LinkHealth),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +119,35 @@ pub struct Headline {
     pub source: String,
     pub link: Option<String>,
     pub published: Option<DateTime<Utc>>,
+}
+
+/// IODA's recent outage signal for the configured sector's country.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CountryOutages {
+    /// ISO 3166-1 alpha-2, echoing the config — so the UI doesn't need the config too.
+    pub country: String,
+    /// Newest first.
+    pub alerts: Vec<OutageAlert>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutageAlert {
+    /// Which of IODA's measurement methods raised it, e.g. "bgp", "ping-slash24".
+    pub datasource: String,
+    /// IODA's own severity word for the alert, e.g. "warning", "critical".
+    pub level: String,
+    pub time: DateTime<Utc>,
+}
+
+/// The rig's own link, measured by timing a request to Cloudflare's edge.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkHealth {
+    pub latency_ms: f64,
+    /// The Cloudflare point-of-presence that answered, e.g. "SJC" — not the rig's
+    /// location, just which edge node is closest on the network right now.
+    pub colo: String,
+    /// Recent latency samples, oldest first, for a trend line.
+    pub history: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

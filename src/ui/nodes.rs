@@ -14,7 +14,7 @@ use super::text::{ago, bar, distance, fit, price, row, spark, spinner, width_of}
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::{self, Fx};
-use crate::reading::{Quake, Quote, Reading, Satellite, SpaceWeather};
+use crate::reading::{LinkHealth, Quake, Quote, Reading, Satellite, SpaceWeather};
 use crate::source::{Link, NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -108,6 +108,7 @@ fn body(app: &App, node: NodeId, width: usize, now: DateTime<Utc>) -> Vec<Line<'
         NodeId::Intercepts => intercepts(app, width, now),
         NodeId::Seismic => seismic(app, width, now),
         NodeId::Sky => sky(app, width),
+        NodeId::Netstatus => netstatus(app, width, now),
     }
 }
 
@@ -486,5 +487,65 @@ pub(super) fn kp_color(kp: f64) -> Color {
         k if k < 4.0 => theme::GREEN,
         k if k < 5.0 => theme::YELLOW,
         _ => theme::MAGENTA,
+    }
+}
+
+fn netstatus(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    if app.sources.contains_key(&SourceId::Uplink) {
+        match app.readings.get(&SourceId::Uplink) {
+            Some(Reading::Uplink(link)) => lines.push(uplink_line(link)),
+            _ => lines.push(awaiting(app, SourceId::Uplink)),
+        }
+    }
+    if app.sources.contains_key(&SourceId::Ioda) {
+        match app.readings.get(&SourceId::Ioda) {
+            Some(Reading::Ioda(outages)) if outages.alerts.is_empty() => {
+                lines.push(Line::from(vec![
+                    label(format!("{} ", outages.country)),
+                    Span::styled("NOMINAL", style(theme::GREEN)),
+                ]));
+            }
+            Some(Reading::Ioda(outages)) => {
+                for a in outages.alerts.iter().take(2) {
+                    let color = outage_color(&a.level);
+                    let right = vec![label(ago(a.time, now))];
+                    let tag = Span::styled("▓ IODA ", style(color));
+                    let room = width.saturating_sub(width_of(&right) + 7);
+                    let detail = format!("{} {}", a.level.to_uppercase(), a.datasource);
+                    lines.push(row(
+                        vec![tag, Span::styled(fit(&detail, room), style(color))],
+                        right,
+                        width,
+                    ));
+                }
+            }
+            _ => lines.push(awaiting(app, SourceId::Ioda)),
+        }
+    }
+    lines
+}
+
+fn uplink_line(link: &LinkHealth) -> Line<'static> {
+    let color = uplink_color(link.latency_ms);
+    Line::from(vec![
+        label("UPLINK "),
+        Span::styled(format!("{:.0}ms", link.latency_ms), style(color)),
+        label(format!("  {}", link.colo)),
+    ])
+}
+
+pub(super) fn uplink_color(ms: f64) -> Color {
+    match ms {
+        m if m < 50.0 => theme::GREEN,
+        m if m < 150.0 => theme::YELLOW,
+        _ => theme::MAGENTA,
+    }
+}
+
+pub(super) fn outage_color(level: &str) -> Color {
+    match level {
+        "critical" => theme::MAGENTA,
+        _ => theme::YELLOW,
     }
 }

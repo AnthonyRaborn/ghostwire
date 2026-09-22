@@ -102,7 +102,35 @@ pub fn detect(
                 .into_iter()
                 .collect()
         }
-        Reading::Weather(_) | Reading::Hn(_) | Reading::OpenSky(_) | Reading::Rss(_) => Vec::new(),
+        Reading::Ioda(outages) => {
+            // Dedup by (datasource, time): re-fetching the same window shouldn't repeat.
+            let seen: HashSet<(&str, i64)> = match old {
+                Some(Reading::Ioda(o)) => o
+                    .alerts
+                    .iter()
+                    .map(|a| (a.datasource.as_str(), a.time.timestamp()))
+                    .collect(),
+                _ => HashSet::new(),
+            };
+            outages
+                .alerts
+                .iter()
+                .filter(|a| !seen.contains(&(a.datasource.as_str(), a.time.timestamp())))
+                .map(|a| {
+                    format!(
+                        "{} {} {}",
+                        outages.country,
+                        a.level.to_uppercase(),
+                        a.datasource
+                    )
+                })
+                .collect()
+        }
+        Reading::Weather(_)
+        | Reading::Hn(_)
+        | Reading::OpenSky(_)
+        | Reading::Rss(_)
+        | Reading::Uplink(_) => Vec::new(),
     }
 }
 

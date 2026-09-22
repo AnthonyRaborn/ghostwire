@@ -31,25 +31,26 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS/Atom feeds | HN Firebase API, CISA KEV JSON, configured feed URLs | None | 5m / 1h / 15m |
 | SEISMIC // HELIOS | Quakes near you + big ones worldwide; Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | USGS GeoJSON feeds; NOAA SWPC JSON | None | 2m; 10m |
 | SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km); adds the ISS's current position | OpenSky Network; wheretheiss.at | None (OpenSky: 400 credits/day anonymous, ≤25 sq° costs 1); None | 5m; 1m |
+| NETSTATUS | Country-level internet outage alerts for `sector.country`; the rig's own uplink latency + edge colo | IODA; Cloudflare trace | None; None | 10m; 30s |
 
 A node can be fed by more than one source (ZAIBATSU = stocks + crypto, INTERCEPTS =
 HN + KEV + RSS, SEISMIC // HELIOS = quakes + space weather — both low-density feeds
-sharing a slot). Link status is tracked per source; the node shows the best of its
-sources, and the footer ticker reports any source that's in trouble. The grid has one
-open cell as a result — nothing lives there yet.
+sharing a slot, NETSTATUS = a country's outage signal + the rig's own link). Link status
+is tracked per source; the node shows the best of its sources, and the footer ticker
+reports any source that's in trouble.
 
 ## Screen (hybrid layout)
 
 ```
- GHOSTWIRE // RIG-07 ░ uplink 5/5 ░ neural load 3% ░ 21:14:07 NET
+ GHOSTWIRE // RIG-07 ░ uplink 6/6 ░ neural load 3% ░ 21:14:07 NET
 ┌ ZAIBATSU INDEX ────────┐┌ ATMOS//SECTOR-4 ───────┐┌ INTERCEPTS ────────────┐
 │ NVDA   182.40 ▲2.1% ▅▆▇││ 17°C  RAIN 20%  WIND 9 ││ ▓ HN  Show HN: a tiny… │
 │ BTC    61,204 ▼0.8% ▇▆▅││ SMOG AQI 42 ░░▒  UV 3  ││ ▓ KEV CVE-2026-41822   │
 └────────────────────────┘└────────────────────────┘└────────────────────────┘
-┌ SEISMIC // HELIOS ─────┐┌ SKYTRAFFIC ────────────┐
-│ M2.1  38km NE   4m ago ││ 7 contacts overhead    │
-│ Kp 3 ▂▃▃▅  G0 S0 R0    ││ UAL1234  FL340  ↗ 452kt│
-└────────────────────────┘└────────────────────────┘
+┌ SEISMIC // HELIOS ─────┐┌ SKYTRAFFIC ────────────┐┌ NETSTATUS ─────────────┐
+│ M2.1  38km NE   4m ago ││ 7 contacts overhead    ││ UPLINK 14ms  SJC       │
+│ Kp 3 ▂▃▃▅  G0 S0 R0    ││ UAL1234  FL340  ↗ 452kt││ US NOMINAL             │
+└────────────────────────┘└────────────────────────┘└────────────────────────┘
  » diving SKYTRAFFIC in 12s ░ NOAA-SWPC: ICE, retry 30s ░ 2 ghosts cached
 ```
 
@@ -81,7 +82,7 @@ compared with the previous catalog.
 
 | Key | Grid | Dive |
 |---|---|---|
-| `1`–`5` | dive into that node (the number is in its title) | switch to that node |
+| `1`–`6` | dive into that node (the number is in its title) | switch to that node |
 | `space` | dive into the next node now | surface |
 | `p` | hold the dive cycle (freezes timers) | hold / release |
 | `esc` | jack out | surface |
@@ -162,6 +163,7 @@ lon = 0.0
 radius_km = 300      # range for nearby quakes
 flight_radius_km = 150  # SKYTRAFFIC range; keeps OpenSky at 1 credit per call
 units = "metric"     # or "imperial"
+country = "US"       # two-letter ISO code — required for NETSTATUS's IODA half
 
 [zaibatsu]
 stocks = ["NVDA", "TSM", "MSFT"]   # needs a Finnhub key in keys.toml
@@ -303,3 +305,19 @@ live beside it in `readings/`.
   list or a missing key). Added as plain booleans, on by default, checked by
   `enabled()` in feeds/mod.rs the same way `zaibatsu.stocks`/`coins` already gate
   Stocks/Crypto — so a rig can now run INTERCEPTS on RSS alone.
+- [x] NETSTATUS — the sixth node, filling the grid's last open cell. Two sources:
+  **IODA**'s outage alerts for `sector.country` (a new config field — IODA tracks
+  countries and networks, not coordinates, so lat/lon doesn't cover it), and the rig's
+  own uplink, measured by timing a plain request to Cloudflare's public trace endpoint
+  and reading back which edge point-of-presence answered. Both keyless. IODA's API had
+  a rough couple of weeks (see the "IODA down" issues on `InetIntel/service-monitoring`)
+  and had moved hosts since its older docs — the real, current route shape
+  (`/v2/outages/alerts?entityType=country&entityCode=US&from=&until=`, query params
+  throughout rather than the old wiki's path-segment style) was confirmed against live
+  responses, not just docs, before building the fixtures. New alerts fire a PRIORITY
+  INTERCEPT (deduped by datasource + timestamp, so re-polling the same window doesn't
+  repeat one); the uplink's own hiccups don't — a fetch failure already shows as ICE,
+  and paging the ticker every time a laptop's wifi blips would be noise, not signal.
+  Deliberately doesn't show the rig's public IP on screen (an ambient always-visible
+  display is exactly the wrong place for that), even though Cloudflare's trace response
+  includes it — only latency and colo make it into `LinkHealth`.

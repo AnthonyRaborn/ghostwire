@@ -13,15 +13,18 @@ pub enum NodeId {
     /// Quakes and space weather: both are low-density feeds, so they share a node.
     Seismic,
     Sky,
+    /// Country-level outage signal plus the rig's own link — the grid's last open cell.
+    Netstatus,
 }
 
 impl NodeId {
-    pub const ALL: [NodeId; 5] = [
+    pub const ALL: [NodeId; 6] = [
         NodeId::Zaibatsu,
         NodeId::Atmos,
         NodeId::Intercepts,
         NodeId::Seismic,
         NodeId::Sky,
+        NodeId::Netstatus,
     ];
 
     pub fn sources(self) -> &'static [SourceId] {
@@ -31,6 +34,7 @@ impl NodeId {
             NodeId::Intercepts => &[SourceId::Kev, SourceId::Hn, SourceId::Rss],
             NodeId::Seismic => &[SourceId::Quakes, SourceId::Swpc],
             NodeId::Sky => &[SourceId::OpenSky, SourceId::Orbit],
+            NodeId::Netstatus => &[SourceId::Ioda, SourceId::Uplink],
         }
     }
 }
@@ -48,10 +52,12 @@ pub enum SourceId {
     OpenSky,
     Orbit,
     Rss,
+    Ioda,
+    Uplink,
 }
 
 impl SourceId {
-    pub const ALL: [SourceId; 10] = [
+    pub const ALL: [SourceId; 12] = [
         SourceId::Stocks,
         SourceId::Crypto,
         SourceId::Weather,
@@ -62,6 +68,8 @@ impl SourceId {
         SourceId::OpenSky,
         SourceId::Orbit,
         SourceId::Rss,
+        SourceId::Ioda,
+        SourceId::Uplink,
     ];
 
     pub fn node(self) -> NodeId {
@@ -84,6 +92,8 @@ impl SourceId {
             SourceId::OpenSky => "OPENSKY",
             SourceId::Orbit => "WHERETHEISS",
             SourceId::Rss => "RSS",
+            SourceId::Ioda => "IODA",
+            SourceId::Uplink => "CLOUDFLARE",
         }
     }
 }

@@ -6,12 +6,14 @@ pub mod demo;
 pub mod finnhub;
 pub mod hn;
 mod http;
+pub mod ioda;
 pub mod kev;
 pub mod open_meteo;
 pub mod opensky;
 pub mod orbit;
 pub mod rss;
 pub mod swpc;
+pub mod uplink;
 pub mod usgs;
 
 use std::future::Future;
@@ -117,6 +119,8 @@ pub fn spawn_all(
             SourceId::OpenSky => launcher.launch(opensky::OpenSky::new(config)),
             SourceId::Orbit => launcher.launch(orbit::Orbit::new(config)),
             SourceId::Rss => launcher.launch(rss::Rss::new(config)),
+            SourceId::Ioda => launcher.launch(ioda::Ioda::new(config)),
+            SourceId::Uplink => launcher.launch(uplink::Uplink::new()),
         }
     }
     launcher.started

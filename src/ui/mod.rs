@@ -173,10 +173,11 @@ mod tests {
                 "SEISMIC",
                 "HELIOS",
                 "SKYTRAFFIC",
+                "NETSTATUS",
             ] {
                 assert!(screen.contains(title), "{title} missing at {w}x{h}");
             }
-            assert!(screen.contains("uplink 10/10"));
+            assert!(screen.contains("uplink 12/12"));
             assert!(screen.contains("all links nominal"));
         }
     }
@@ -281,6 +282,7 @@ mod tests {
                 vec!["EVENTS // NEARBY 7 DAYS", "Kp // LAST 72H"],
             ),
             (NodeId::Sky, vec!["CONTACTS //"]),
+            (NodeId::Netstatus, vec!["IODA // COUNTRY OUTAGES"]),
         ];
         for (node, markers) in expected {
             let mut app = demo_app();

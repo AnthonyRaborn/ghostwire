@@ -10,13 +10,15 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Paragraph, Sparkline};
 
-use super::nodes::{aqi_color, awaiting, kp_color, label, mag_color, status, value};
+use super::nodes::{
+    aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
+};
 use super::text::{ago, bar, distance, fit, fit_series, price, row, width_of};
 use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
-use crate::reading::{Quake, Quote, Reading, Satellite, Weather, xray_class};
+use crate::reading::{LinkHealth, Quake, Quote, Reading, Satellite, Weather, xray_class};
 use crate::source::{NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -59,6 +61,7 @@ pub fn draw(
         NodeId::Intercepts => intercepts(frame, body, app, now),
         NodeId::Seismic => seismic(frame, body, app, now),
         NodeId::Sky => sky(frame, body, app),
+        NodeId::Netstatus => netstatus(frame, body, app, now),
     }
     let decay = app.node_decay(node, now);
     let buf = frame.buffer_mut();
@@ -932,6 +935,101 @@ fn altitude_color(altitude_m: Option<f64>) -> Color {
         Some(m) if m < 7_925.0 => theme::CYAN,
         Some(_) => theme::GHOST,
         None => theme::MUTED,
+    }
+}
+
+fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+    let [left, _, right] = Layout::horizontal([
+        Constraint::Percentage(42),
+        Constraint::Length(2),
+        Constraint::Min(30),
+    ])
+    .areas(area);
+
+    match app.readings.get(&SourceId::Uplink) {
+        Some(Reading::Uplink(link)) => uplink_detail(frame, left, link),
+        _ if app.sources.contains_key(&SourceId::Uplink) => {
+            frame.render_widget(Paragraph::new(awaiting(app, SourceId::Uplink)), left);
+        }
+        _ => {}
+    }
+
+    let mut lines = vec![header("IODA // COUNTRY OUTAGES"), Line::default()];
+    match app.readings.get(&SourceId::Ioda) {
+        Some(Reading::Ioda(outages)) => {
+            lines.push(Line::from(vec![
+                label("SECTOR "),
+                value(outages.country.clone()),
+            ]));
+            lines.push(Line::default());
+            if outages.alerts.is_empty() {
+                lines.push(Line::styled(
+                    "no alerts in the last 3h",
+                    Style::new().fg(theme::GREEN),
+                ));
+            } else {
+                for a in &outages.alerts {
+                    let color = outage_color(&a.level);
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            format!("{:<8} ", a.level.to_uppercase()),
+                            Style::new().fg(color).add_modifier(Modifier::BOLD),
+                        ),
+                        value(a.datasource.clone()),
+                        label(format!("   {} ago", ago(a.time, now))),
+                    ]));
+                }
+            }
+        }
+        _ if app.sources.contains_key(&SourceId::Ioda) => lines.push(awaiting(app, SourceId::Ioda)),
+        _ => {}
+    }
+    frame.render_widget(Paragraph::new(lines), right);
+}
+
+fn uplink_detail(frame: &mut Frame, area: Rect, link: &LinkHealth) {
+    let color = uplink_color(link.latency_ms);
+    let [top, _, chart_area] = Layout::vertical([
+        Constraint::Length(5),
+        Constraint::Length(1),
+        Constraint::Min(4),
+    ])
+    .areas(area);
+
+    let big = bigtext::render(&format!("{:.0}", link.latency_ms));
+    let big_width = big[0].chars().count() as u16 + 4;
+    let [big_area, details] =
+        Layout::horizontal([Constraint::Length(big_width.max(12)), Constraint::Min(14)]).areas(top);
+    let mut big_lines: Vec<Line> = big
+        .iter()
+        .map(|r| Line::styled(r.clone(), Style::new().fg(color)))
+        .collect();
+    big_lines[0]
+        .spans
+        .push(Span::styled(" ms", Style::new().fg(theme::MUTED)));
+    frame.render_widget(Paragraph::new(big_lines), big_area);
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![label("EDGE "), value(link.colo.clone())]),
+            Line::from(vec![label("VIA "), value("cloudflare trace")]),
+        ]),
+        details,
+    );
+
+    if link.history.len() > 1 {
+        frame.render_widget(
+            Paragraph::new(header("LATENCY // RECENT")),
+            Rect {
+                height: 1,
+                ..chart_area
+            },
+        );
+        let graph = Rect {
+            y: chart_area.y + 1,
+            height: chart_area.height.saturating_sub(1),
+            ..chart_area
+        };
+        chart(frame, graph, &link.history, None, color);
     }
 }
 

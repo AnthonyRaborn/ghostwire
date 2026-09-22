@@ -9,6 +9,9 @@ name = "SECTOR-4"
 radius_km = 300      # range for nearby quakes
 flight_radius_km = 150  # range for SKYTRAFFIC; bigger areas burn OpenSky's daily quota faster
 units = "metric"     # or "imperial"
+# Two-letter ISO country code, e.g. "US". NETSTATUS's country-outage half stays offline
+# until set — IODA tracks countries, not coordinates, so lat/lon doesn't cover it.
+# country = "US"
 
 [zaibatsu]
 # Stock quotes need a free Finnhub key in keys.toml (next to this file).

@@ -26,6 +26,9 @@ pub struct Sector {
     /// and an area over 25 square degrees costs 2 credits a call instead of 1.
     pub flight_radius_km: f64,
     pub units: Units,
+    /// ISO 3166-1 alpha-2, e.g. "US" — NETSTATUS's own fix, since IODA tracks countries,
+    /// not coordinates.
+    pub country: Option<String>,
 }
 
 impl Default for Sector {
@@ -37,6 +40,7 @@ impl Default for Sector {
             radius_km: 300.0,
             flight_radius_km: 150.0,
             units: Units::Metric,
+            country: None,
         }
     }
 }
@@ -159,6 +163,13 @@ impl Config {
         if s.radius_km <= 0.0 || s.flight_radius_km <= 0.0 {
             bail!("[sector] radius_km and flight_radius_km must be positive");
         }
+        if let Some(country) = &s.country
+            && !(country.len() == 2 && country.bytes().all(|b| b.is_ascii_uppercase()))
+        {
+            bail!(
+                "[sector] country {country:?} must be a two-letter uppercase ISO code, e.g. \"US\""
+            );
+        }
         if self.fx.dive_hold >= self.fx.dive_every {
             bail!("[fx] dive_hold must be shorter than dive_every");
         }
@@ -231,6 +242,14 @@ mod tests {
     #[test]
     fn rejects_out_of_range_coordinates() {
         assert!(Config::parse("[sector]\nlat = 91.0\nlon = 0.0").is_err());
+    }
+
+    #[test]
+    fn accepts_and_rejects_country_codes() {
+        let config = Config::parse("[sector]\ncountry = \"US\"").unwrap();
+        assert_eq!(config.sector.country.as_deref(), Some("US"));
+        assert!(Config::parse("[sector]\ncountry = \"USA\"").is_err());
+        assert!(Config::parse("[sector]\ncountry = \"us\"").is_err());
     }
 
     #[test]

@@ -5,7 +5,7 @@ use crate::source::{Link, NodeId};
 pub const RIG: &str = "GHOSTWIRE";
 pub const RIG_ID: &str = "RIG-07";
 pub const CONSTRUCT: &str = "CONSTRUCT // SIMULATED FEEDS";
-pub const KEYS_GRID: &str = "[1-5] dive  [space] next  [p] hold  [r] re-breach  [q] jack out";
+pub const KEYS_GRID: &str = "[1-6] dive  [space] next  [p] hold  [r] re-breach  [q] jack out";
 pub const KEYS_DIVE: &str = "[esc] surface  [space] next  [p] hold  [q] jack out";
 pub const JACKING_IN: &str = "JACKING IN";
 pub const DIVE_HELD: &str = "» dive cycle held";
@@ -24,6 +24,7 @@ pub fn node_title(node: NodeId, sector: &str) -> String {
         NodeId::Intercepts => "INTERCEPTS".into(),
         NodeId::Seismic => "SEISMIC // HELIOS".into(),
         NodeId::Sky => "SKYTRAFFIC".into(),
+        NodeId::Netstatus => "NETSTATUS".into(),
     }
 }
 
