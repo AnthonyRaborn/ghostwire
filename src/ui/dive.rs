@@ -9,7 +9,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Axis, Block, BorderType, Chart, Dataset, GraphType, Paragraph};
+use ratatui::widgets::{Axis, Bar, BarChart, Block, BorderType, Chart, Dataset, GraphType, Paragraph};
 
 use super::nodes::{
     aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
@@ -396,15 +396,16 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     if w.next_24h.is_empty() {
         return;
     }
-    // A nowcast radar needs real width to read as round rather than squashed.
+    // The precip bar chart needs its own real estate alongside the temp chart, not a
+    // squeeze — only split the row once there's width for both.
     let chart_area = if bottom.width >= 90 && !w.precip_next.is_empty() {
-        let [chart_area, _, radar_area] = Layout::horizontal([
+        let [chart_area, _, precip_area] = Layout::horizontal([
             Constraint::Min(40),
             Constraint::Length(2),
             Constraint::Length(34),
         ])
         .areas(bottom);
-        precip_nowcast(frame, radar_area, w);
+        precip_nowcast(frame, precip_area, w);
         chart_area
     } else {
         bottom
@@ -435,18 +436,14 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-/// Precipitation drifting in with the wind: bearing is the direction it's coming from
-/// (the surface wind reading), radius is hours until it arrives. Real hourly data, an
-/// interpretive layout — there's no spatial radar feed behind ATMOS, just a forecast.
+/// Hourly chance of rain as a small bar chart. This used to reuse the radar-scope
+/// widget (bearing = wind direction, radius = hour), the same trick as the other
+/// scopes, but with every point sitting on one bearing it read as noise rather than
+/// information — a plain bar per hour, height and color by chance of rain, says the
+/// same thing more clearly.
 fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
-    // A legend line rather than on-scope labels: every hour sits on the same bearing
-    // (the wind), so labels next to each point would stack on top of one another.
-    let [title, legend, scope] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Min(8),
-    ])
-    .areas(area);
+    let [title, chart_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(4)]).areas(area);
     frame.render_widget(
         Paragraph::new(header_src(
             format!("PRECIP NOWCAST // NEXT {}H", w.precip_next.len()),
@@ -454,51 +451,38 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
         )),
         title,
     );
-    let mut legend_spans = Vec::new();
-    for (i, p) in w.precip_next.iter().enumerate() {
-        if i > 0 {
-            legend_spans.push(label(" · "));
-        }
-        legend_spans.push(Span::styled(
-            format!("+{}h {:.0}%", i + 1, p.prob),
-            Style::new().fg(precip_color(p.prob)),
-        ));
-    }
-    frame.render_widget(Paragraph::new(Line::from(legend_spans)), legend);
 
-    let hours = w.precip_next.len() as f64;
-    let blips: Vec<radar::Blip> = w
+    if w.precip_next.iter().all(|p| p.prob < 10.0) {
+        frame.render_widget(
+            Paragraph::new(Line::styled(
+                "nothing incoming",
+                Style::new().fg(theme::MUTED),
+            )),
+            chart_area,
+        );
+        return;
+    }
+
+    let bars: Vec<Bar> = w
         .precip_next
         .iter()
         .enumerate()
-        .map(|(i, p)| radar::Blip {
-            r: i as f64 + 1.0,
-            bearing: w.wind_from,
-            glyph: precip_glyph(p.mm).into(),
-            color: precip_color(p.prob),
-            label: None,
+        .map(|(i, p)| {
+            let color = precip_color(p.prob);
+            Bar::with_label(format!("+{}h", i + 1), p.prob.round() as u64)
+                .style(Style::new().fg(color))
+                .value_style(Style::new().fg(color).add_modifier(Modifier::BOLD))
+                .text_value(format!("{:.0}%", p.prob))
         })
         .collect();
-    let clear = w.precip_next.iter().all(|p| p.prob < 10.0);
-    let note = clear.then_some("NOTHING INCOMING");
-    radar::draw(
-        frame,
-        scope,
-        hours,
-        &blips,
-        sweep(),
-        &format!("+{hours:.0}h"),
-        note,
+    frame.render_widget(
+        BarChart::new(bars)
+            .max(100)
+            .bar_width(5)
+            .bar_gap(2)
+            .label_style(Style::new().fg(theme::MUTED)),
+        chart_area,
     );
-}
-
-fn precip_glyph(mm: f64) -> char {
-    match mm {
-        m if m < 0.1 => '·',
-        m if m < 0.5 => '•',
-        m if m < 2.0 => '●',
-        _ => '◉',
-    }
 }
 
 fn precip_color(prob: f64) -> Color {
