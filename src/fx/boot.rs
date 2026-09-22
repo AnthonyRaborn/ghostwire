@@ -73,8 +73,9 @@ impl Boot {
         let elapsed = now.saturating_duration_since(self.start);
         let mut texts: Vec<(String, Style)> = vec![(
             format!(
-                "{} // {} · v{}",
+                "{} // {} // {} · v{}",
                 lexicon::RIG,
+                lexicon::CODENAME,
                 lexicon::RIG_ID,
                 env!("CARGO_PKG_VERSION")
             ),
@@ -183,7 +184,7 @@ mod tests {
             t0,
         );
         let early = screen(&boot, t0 + Duration::from_millis(300));
-        assert!(early.contains("GHOSTWIRE // RIG-07"));
+        assert!(early.contains("GHOSTWIRE // ZERO-DAY // RIG-07"));
         assert!(!early.contains("keys"));
 
         let late = screen(&boot, t0 + per_line * 4);

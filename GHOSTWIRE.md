@@ -42,7 +42,7 @@ reports any source that's in trouble.
 ## Screen (hybrid layout)
 
 ```
- GHOSTWIRE // RIG-07 ░ uplink 6/6 ░ neural load 3% ░ 21:14:07 NET
+ GHOSTWIRE // ZERO-DAY // RIG-07 ░ uplink 6/6 ░ neural load 3% ░ 21:14:07 NET
 ┌ ZAIBATSU INDEX ────────┐┌ ATMOS//SECTOR-4 ───────┐┌ INTERCEPTS ────────────┐
 │ NVDA   182.40 ▲2.1% ▅▆▇││ 17°C  RAIN 20%  WIND 9 ││ ▓ HN  Show HN: a tiny… │
 │ BTC    61,204 ▼0.8% ▇▆▅││ SMOG AQI 42 ░░▒  UV 3  ││ ▓ KEV CVE-2026-41822   │

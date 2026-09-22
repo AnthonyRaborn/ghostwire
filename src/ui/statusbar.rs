@@ -28,7 +28,7 @@ pub fn draw_top(frame: &mut Frame, area: Rect, app: &App) {
     let (live, total) = app.uplink();
     let mut left = vec![
         Span::styled(
-            format!(" {} // {}", lexicon::RIG, lexicon::RIG_ID),
+            format!(" {} // {} // {}", lexicon::RIG, lexicon::CODENAME, lexicon::RIG_ID),
             Style::new().fg(theme::CYAN).add_modifier(Modifier::BOLD),
         ),
         sep(),
