@@ -70,9 +70,15 @@ pub fn draw(frame: &mut Frame, app: &App, fx: &mut Fx) {
     fx.screen(frame.buffer_mut(), area);
 }
 
-/// Whether the screen shows a radar, whose sweep needs a steady frame rate.
+/// Whether the screen shows a radar, whose sweep needs a steady frame rate. ATMOS only
+/// shows one when its precip nowcast fits (see `dive::atmos`'s `show_nowcast`), but
+/// that's a rare, low-stakes case to over-animate for — not worth threading terminal
+/// width through here just to skip it.
 pub fn radar_on_screen(app: &App) -> bool {
-    matches!(app.dive.diving(), Some(NodeId::Seismic | NodeId::Sky))
+    matches!(
+        app.dive.diving(),
+        Some(NodeId::Seismic | NodeId::Sky | NodeId::Atmos)
+    )
 }
 
 /// Three across when there's room (or when the screen is short); two across otherwise.
@@ -296,6 +302,22 @@ mod tests {
             }
             assert!(screen.contains("[esc] surface"), "{node:?}");
         }
+    }
+
+    #[test]
+    fn radar_on_screen_covers_every_node_that_draws_one() {
+        // A stale frame budget here is what made ATMOS's nowcast sweep choppy: without
+        // this node listed, the render loop drops to ~1 redraw/sec while diving it,
+        // so a 4s sweep only advances in ~90° jumps instead of smoothly.
+        for node in [NodeId::Seismic, NodeId::Sky, NodeId::Atmos] {
+            let mut app = demo_app();
+            app.dive.dive_now(node, Instant::now());
+            assert!(radar_on_screen(&app), "{node:?}");
+        }
+        let mut app = demo_app();
+        app.dive.dive_now(NodeId::Zaibatsu, Instant::now());
+        assert!(!radar_on_screen(&app));
+        assert!(!radar_on_screen(&demo_app()));
     }
 
     #[test]
