@@ -1,5 +1,6 @@
 mod app;
 mod cache;
+mod colordepth;
 mod config;
 mod cpu;
 mod dive;
@@ -106,7 +107,9 @@ async fn main() -> Result<()> {
         app.warnings.push(lexicon::KEYS_EXPOSED.into());
     }
     let boot = boot_log(&app, &config_path, &keys, keys_exposed);
-    let mut fx = Fx::new(app.config.fx.level, boot, Instant::now());
+    let depth = colordepth::Depth::detect();
+    tracing::info!(?depth, "color depth");
+    let mut fx = Fx::new(app.config.fx.level, boot, Instant::now(), depth);
 
     let mut terminal = ratatui::init();
     let _ = crossterm::execute!(

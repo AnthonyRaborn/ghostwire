@@ -20,6 +20,7 @@ use decrypt::Decrypt;
 use glitch::Burst;
 
 use crate::app::Signal;
+use crate::colordepth::{self, Depth};
 use crate::config::FxLevel;
 use crate::source::NodeId;
 use crate::theme;
@@ -109,6 +110,7 @@ impl Snapshot {
 
 pub struct Fx {
     tuning: Tuning,
+    depth: Depth,
     epoch: Instant,
     boot: Option<Boot>,
     decrypts: HashMap<NodeId, Decrypt>,
@@ -118,7 +120,7 @@ pub struct Fx {
 }
 
 impl Fx {
-    pub fn new(level: FxLevel, boot_lines: Vec<BootLine>, now: Instant) -> Self {
+    pub fn new(level: FxLevel, boot_lines: Vec<BootLine>, now: Instant, depth: Depth) -> Self {
         let tuning = tuning(level);
         let boot = tuning
             .boot_line
@@ -126,6 +128,7 @@ impl Fx {
         let next_ambient = tuning.ambient.map(|range| now + ambient_wait(range, 0));
         Self {
             tuning,
+            depth,
             epoch: now,
             boot,
             decrypts: HashMap::new(),
@@ -250,6 +253,7 @@ impl Fx {
     /// Whole-screen effects, applied last.
     pub fn screen(&self, buf: &mut Buffer, area: Rect) {
         noise::scanlines(buf, area);
+        colordepth::downsample(buf, area, self.depth);
     }
 
     fn ms(&self, now: Instant) -> u64 {
@@ -320,7 +324,7 @@ mod tests {
     #[test]
     fn rests_when_nothing_moves() {
         let now = Instant::now();
-        let mut fx = Fx::new(FxLevel::Active, Vec::new(), now);
+        let mut fx = Fx::new(FxLevel::Active, Vec::new(), now, Depth::TrueColor);
         fx.skip_boot(now);
         fx.on_frame(now, &[]);
         // The boot's closing reveal is still running.
@@ -334,7 +338,12 @@ mod tests {
     #[test]
     fn calm_skips_the_boot_and_never_glitches_on_trouble() {
         let now = Instant::now();
-        let mut fx = Fx::new(FxLevel::Calm, vec![BootLine::new("x", "y")], now);
+        let mut fx = Fx::new(
+            FxLevel::Calm,
+            vec![BootLine::new("x", "y")],
+            now,
+            Depth::TrueColor,
+        );
         assert!(!fx.booting(now));
         fx.absorb([Signal::Trouble(NodeId::Sky)], now);
         assert!(fx.bursts.is_empty());

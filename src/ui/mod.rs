@@ -146,7 +146,12 @@ mod tests {
     fn render(app: &App, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         // Calm has no boot, and no effect runs without a signal, so frames are stable.
-        let mut fx = Fx::new(crate::config::FxLevel::Calm, Vec::new(), Instant::now());
+        let mut fx = Fx::new(
+            crate::config::FxLevel::Calm,
+            Vec::new(),
+            Instant::now(),
+            crate::colordepth::Depth::TrueColor,
+        );
         terminal.draw(|frame| draw(frame, app, &mut fx)).unwrap();
         let buf = terminal.backend().buffer();
         (0..height)
@@ -294,5 +299,34 @@ mod tests {
     fn tiny_terminal_says_so() {
         let screen = render(&demo_app(), 40, 10);
         assert!(screen.contains("TOO SMALL"));
+    }
+
+    #[test]
+    fn minimum_size_renders_the_grid_not_the_fallback() {
+        let screen = render(&demo_app(), MIN_W, MIN_H);
+        assert!(!screen.contains("TOO SMALL"), "{screen}");
+        assert!(screen.contains("ZAIBATSU"), "{screen}");
+    }
+
+    #[test]
+    fn one_row_short_falls_back() {
+        let screen = render(&demo_app(), MIN_W, MIN_H - 1);
+        assert!(screen.contains("TOO SMALL"), "{screen}");
+    }
+
+    #[test]
+    fn one_column_short_falls_back() {
+        let screen = render(&demo_app(), MIN_W - 1, MIN_H);
+        assert!(screen.contains("TOO SMALL"), "{screen}");
+    }
+
+    #[test]
+    fn dive_renders_at_minimum_size_without_panicking() {
+        for node in NodeId::ALL {
+            let mut app = demo_app();
+            app.dive.dive_now(node, Instant::now());
+            let screen = render(&app, MIN_W, MIN_H);
+            assert!(screen.contains("◢ DIVE //"), "{node:?}: {screen}");
+        }
     }
 }
