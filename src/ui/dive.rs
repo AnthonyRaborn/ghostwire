@@ -327,7 +327,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     // The precip nowcast (a compact radar-style scope) sits in the upper right,
     // alongside the current-conditions fields, once there's width for all three
     // columns; the forecast chart below always gets the full row regardless.
-    let show_nowcast = area.width >= 100 && !w.precip_next.is_empty();
+    let show_nowcast = area.width >= 110 && !w.precip_next.is_empty();
     let top_height = if show_nowcast { 13 } else { 9 };
     let [top, _, bottom] = Layout::vertical([
         Constraint::Length(top_height),
@@ -338,11 +338,16 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
 
     let big = bigtext::render(&format!("{:.0}", w.temp));
     let big_width = big[0].chars().count() as u16 + 4;
+    // The fields column is a fixed width (its content is fixed-format, not organic)
+    // so the leftover space splits evenly around the radar instead of the radar being
+    // pushed flush against the right edge.
     let (left, details, nowcast_area) = if show_nowcast {
-        let [left, details, nowcast_area] = Layout::horizontal([
+        let [left, details, _, nowcast_area, _] = Layout::horizontal([
             Constraint::Length(big_width.max(12)),
-            Constraint::Min(30),
+            Constraint::Length(52),
+            Constraint::Fill(1),
             Constraint::Length(34),
+            Constraint::Fill(1),
         ])
         .areas(top);
         (left, details, Some(nowcast_area))
@@ -517,11 +522,14 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
 /// interpretive layout — there's no spatial radar feed behind ATMOS, just a forecast.
 fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
     // A legend line rather than on-scope labels: every hour sits on the same bearing
-    // (the wind), so labels next to each point would stack on top of one another.
-    let [title, legend, scope] = Layout::vertical([
+    // (the wind), so labels next to each point would stack on top of one another. The
+    // wind line under the scope is the same reason the bearing itself isn't marked on
+    // the ring — it's the one thing every wedge shares, so it only needs saying once.
+    let [title, legend, scope, wind_line] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(6),
+        Constraint::Length(1),
     ])
     .areas(area);
     frame.render_widget(
@@ -558,7 +566,7 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
             bearing: w.wind_from,
             half_width_deg: 6.0 + (p.prob / 100.0) * 34.0,
             color: precip_color(p.prob),
-            label: Some(format!("+{}h", i + 1)),
+            label: None,
         })
         .collect();
     let note = wedges.is_empty().then_some("NOTHING INCOMING");
@@ -569,10 +577,24 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
             range: hours,
             blips: &[],
             wedges: &wedges,
+            rings: w.precip_next.len() as u32,
             sweep: sweep(),
             range_label: &format!("+{hours:.0}h"),
             empty_note: note,
         },
+    );
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            label("WIND FROM  "),
+            value(format!(
+                "{} {}",
+                geo::compass(w.wind_from),
+                geo::arrow(w.wind_from + 180.0)
+            )),
+        ]))
+        .centered(),
+        wind_line,
     );
 }
 
@@ -805,6 +827,7 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
             range: sector.radius_km,
             blips: &blips,
             wedges: &[],
+            rings: radar::DEFAULT_RINGS,
             sweep: sweep(),
             range_label: &distance(sector.radius_km, sector.units),
             empty_note: note,
@@ -1008,6 +1031,7 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
             range: sector.flight_radius_km,
             blips: &blips,
             wedges: &[],
+            rings: radar::DEFAULT_RINGS,
             sweep: sweep(),
             range_label: &distance(sector.flight_radius_km, sector.units),
             empty_note: None,

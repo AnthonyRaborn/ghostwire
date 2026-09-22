@@ -2,7 +2,7 @@
 //! after the sweep passes them and fade until it comes round again.
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::Span;
@@ -14,7 +14,8 @@ use crate::theme;
 pub const SWEEP_PERIOD_MS: i64 = 4_000;
 /// Degrees of afterglow behind the sweep.
 const GLOW_DEG: f64 = 120.0;
-const RINGS: u32 = 3;
+/// Range rings for a scope with no natural step count of its own (quakes, aircraft).
+pub const DEFAULT_RINGS: u32 = 3;
 
 pub struct Blip {
     /// Radial distance from center, in whatever unit the scope's `range` is (km for a
@@ -44,22 +45,18 @@ pub fn sweep_at(ms: i64) -> f64 {
 }
 
 /// The largest scope that fits in `area` and looks round: terminal cells are about
-/// twice as tall as they are wide, so it's twice as many columns as rows.
+/// twice as tall as they are wide, so it's twice as many columns as rows. Centered by
+/// direct arithmetic rather than a flexed layout, so the leftover space always splits
+/// symmetrically instead of however the layout engine happens to round it.
 fn scope_area(area: Rect) -> Rect {
     let height = area.height.min(area.width / 2);
-    let [_, row, _] = Layout::vertical([
-        Constraint::Fill(1),
-        Constraint::Length(height),
-        Constraint::Fill(1),
-    ])
-    .areas(area);
-    let [_, scope, _] = Layout::horizontal([
-        Constraint::Fill(1),
-        Constraint::Length(height * 2),
-        Constraint::Fill(1),
-    ])
-    .areas(row);
-    scope
+    let width = height * 2;
+    Rect {
+        x: area.x + (area.width - width) / 2,
+        y: area.y + (area.height - height) / 2,
+        width,
+        height,
+    }
 }
 
 /// Everything a scope shows besides its position on screen.
@@ -68,6 +65,10 @@ pub struct Scope<'a> {
     pub range: f64,
     pub blips: &'a [Blip],
     pub wedges: &'a [Wedge],
+    /// Range rings drawn at even steps out to `range`. Match this to the data's own
+    /// natural step count where there is one (e.g. one ring per forecast hour) so the
+    /// rings mean something instead of being an arbitrary reference grid.
+    pub rings: u32,
     pub sweep: f64,
     pub range_label: &'a str,
     pub empty_note: Option<&'a str>,
@@ -78,6 +79,7 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
         range,
         blips,
         wedges,
+        rings,
         sweep,
         range_label,
         empty_note,
@@ -94,11 +96,11 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
         .x_bounds([-r, r])
         .y_bounds([-r, r])
         .paint(|ctx| {
-            for ring in 1..=RINGS {
+            for ring in 1..=rings {
                 ctx.draw(&Circle {
                     x: 0.0,
                     y: 0.0,
-                    radius: r * f64::from(ring) / f64::from(RINGS),
+                    radius: r * f64::from(ring) / f64::from(rings),
                     color: theme::DIM,
                 });
             }
@@ -127,10 +129,9 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
                 ctx.draw(&CanvasLine::new(0.0, 0.0, x, y, color));
             }
             ctx.layer();
-            for (label, deg) in [("N", 0.0), ("E", 90.0), ("S", 180.0), ("W", 270.0)] {
-                let (x, y) = point(r * 0.92, deg);
-                ctx.print(x, y, Span::styled(label, Style::new().fg(theme::MUTED)));
-            }
+            // North-up always, so only North needs marking.
+            let (nx, ny) = point(r * 0.92, 0.0);
+            ctx.print(nx, ny, Span::styled("N", Style::new().fg(theme::MUTED)));
             let (x, y) = point(r * 0.99, 135.0);
             ctx.print(
                 x,
@@ -203,5 +204,17 @@ mod tests {
         assert_eq!(scope.x, 30);
         let tall = scope_area(Rect::new(0, 0, 30, 40));
         assert_eq!((tall.width, tall.height), (30, 15));
+    }
+
+    #[test]
+    fn scope_centers_with_an_odd_leftover() {
+        // An odd amount of slack on either axis used to split unevenly under
+        // Layout::Fill; direct arithmetic always centers as tightly as integer
+        // division allows, off by at most one column/row rather than biased to a side.
+        let scope = scope_area(Rect::new(0, 0, 101, 21));
+        let (left, right) = (scope.x, 101 - (scope.x + scope.width));
+        assert!(left.abs_diff(right) <= 1, "{left} vs {right}");
+        let (top, bottom) = (scope.y, 21 - (scope.y + scope.height));
+        assert!(top.abs_diff(bottom) <= 1, "{top} vs {bottom}");
     }
 }
