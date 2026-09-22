@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, Timelike, Utc};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -15,7 +15,7 @@ use super::nodes::{
     aqi_color, awaiting, kp_color, label, mag_color, outage_color, status, uplink_color, value,
 };
 use super::text::{ago, bar, distance, fit, price, row, width_of, wrap};
-use super::{bigtext, radar};
+use super::{bigtext, globe, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
@@ -1090,7 +1090,33 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         _ if app.sources.contains_key(&SourceId::Ioda) => lines.push(awaiting(app, SourceId::Ioda)),
         _ => {}
     }
-    frame.render_widget(Paragraph::new(lines), right);
+    let text_height = lines.len() as u16;
+    let [text_area, _, globe_area] = Layout::vertical([
+        Constraint::Length(text_height),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(right);
+    frame.render_widget(Paragraph::new(lines), text_area);
+
+    // Whatever's left under the alerts — usually most of the column, since IODA is
+    // quiet more often than not. No feed behind this one: it's the sun's position,
+    // computed locally, same as the radar sweep.
+    if globe_area.height >= 6 && globe_area.width >= 20 {
+        let [globe_header, globe_body] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(globe_area);
+        frame.render_widget(
+            Paragraph::new(header(format!("TERMINATOR // {:02}Z", now.hour()))),
+            globe_header,
+        );
+        let globe_lines = globe::render(
+            globe_body.width as usize,
+            globe_body.height as usize,
+            now,
+            app.config.sector.fix(),
+        );
+        frame.render_widget(Paragraph::new(globe_lines), globe_body);
+    }
 }
 
 /// A rough 0-100 read on the country's link health: full when nothing's alerting,

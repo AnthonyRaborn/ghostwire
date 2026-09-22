@@ -1,5 +1,6 @@
 mod bigtext;
 mod dive;
+mod globe;
 mod nodes;
 mod radar;
 mod statusbar;
