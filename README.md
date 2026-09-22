@@ -23,6 +23,20 @@ a radar scope, a bar chart, a block-font readout — then surfaces back to the g
 
 ## Install
 
+Prebuilt binaries for macOS, Linux, and Windows are on the
+[releases page](https://github.com/AnthonyRaborn/ghostwire/releases/latest), or use an
+installer:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AnthonyRaborn/ghostwire/releases/latest/download/ghostwire-tui-installer.sh | sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/AnthonyRaborn/ghostwire/releases/latest/download/ghostwire-tui-installer.ps1 | iex"
+```
+
+With a Rust toolchain (1.88+):
+
 ```bash
 cargo install ghostwire-tui
 ```

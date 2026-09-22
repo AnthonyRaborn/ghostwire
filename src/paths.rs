@@ -49,11 +49,10 @@ pub fn write_new(path: &Path, contents: &str, private: bool) -> Result<()> {
         .with_context(|| format!("writing {}", path.display()))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn private_files_are_owner_only_and_never_overwritten() {
         use std::os::unix::fs::PermissionsExt;
