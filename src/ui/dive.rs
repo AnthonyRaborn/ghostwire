@@ -78,6 +78,17 @@ fn header(text: impl Into<String>) -> Line<'static> {
     )
 }
 
+/// A section header with a muted attribution tag naming where the data comes from —
+/// only where the header text itself doesn't already say it (KEV, IODA, NOAA SWPC).
+fn header_src(text: impl Into<String>, source: &str) -> Line<'static> {
+    let mut line = header(text);
+    line.spans.push(Span::styled(
+        format!("  {source}"),
+        Style::new().fg(theme::MUTED),
+    ));
+    line
+}
+
 /// A bar chart of `values` across the full width of `area`.
 fn chart(frame: &mut Frame, area: Rect, values: &[f64], range: Option<(f64, f64)>, color: Color) {
     if area.is_empty() || values.is_empty() {
@@ -151,12 +162,12 @@ fn axis(labels: &[&str], width: usize) -> Line<'static> {
 }
 
 fn zaibatsu(frame: &mut Frame, area: Rect, app: &App) {
-    let sections: Vec<(SourceId, &str)> = [
-        (SourceId::Stocks, "EQUITIES // SESSION"),
-        (SourceId::Crypto, "CRYPTO // 7 DAYS"),
+    let sections: Vec<(SourceId, &str, &str)> = [
+        (SourceId::Stocks, "EQUITIES // SESSION", "finnhub"),
+        (SourceId::Crypto, "CRYPTO // 7 DAYS", "coingecko"),
     ]
     .into_iter()
-    .filter(|(id, _)| app.sources.contains_key(id))
+    .filter(|(id, _, _)| app.sources.contains_key(id))
     .collect();
     let quotes = |id: SourceId| match app.readings.get(&id) {
         Some(Reading::Stocks(q) | Reading::Crypto(q)) => q.as_slice(),
@@ -164,7 +175,7 @@ fn zaibatsu(frame: &mut Frame, area: Rect, app: &App) {
     };
     let count: u16 = sections
         .iter()
-        .map(|(id, _)| quotes(*id).len().max(1) as u16)
+        .map(|(id, _, _)| quotes(*id).len().max(1) as u16)
         .sum();
     let spare = area
         .height
@@ -173,12 +184,12 @@ fn zaibatsu(frame: &mut Frame, area: Rect, app: &App) {
 
     let mut y = area.y;
     let bottom = area.bottom();
-    for (id, title) in sections {
+    for (id, title, source) in sections {
         if y >= bottom {
             break;
         }
         frame.render_widget(
-            Paragraph::new(header(title)),
+            Paragraph::new(header_src(title, source)),
             Rect {
                 y,
                 height: 1,
@@ -373,7 +384,10 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .areas(chart_area);
     frame.render_widget(
-        Paragraph::new(header(format!("NEXT 24H // {lo:.0}–{hi:.0}{deg}"))),
+        Paragraph::new(header_src(
+            format!("NEXT 24H // {lo:.0}–{hi:.0}{deg}"),
+            "open-meteo",
+        )),
         title,
     );
     chart(frame, graph, &w.next_24h, None, theme::CYAN);
@@ -399,10 +413,10 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
     ])
     .areas(area);
     frame.render_widget(
-        Paragraph::new(header(format!(
-            "PRECIP NOWCAST // NEXT {}H",
-            w.precip_next.len()
-        ))),
+        Paragraph::new(header_src(
+            format!("PRECIP NOWCAST // NEXT {}H", w.precip_next.len()),
+            "open-meteo",
+        )),
         title,
     );
     let mut legend_spans = Vec::new();
@@ -487,7 +501,10 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     let kev_area = columns.next().unwrap_or_default();
     let hn_area = columns.next().unwrap_or_default();
     let width = kev_area.width as usize;
-    let mut kev = vec![header("CISA KEV // KNOWN EXPLOITED"), Line::default()];
+    let mut kev = vec![
+        header_src("CISA KEV // KNOWN EXPLOITED", "cisa.gov"),
+        Line::default(),
+    ];
     match app.readings.get(&SourceId::Kev) {
         Some(Reading::Kev(vulns)) => {
             let today = now.with_timezone(&Local).date_naive();
@@ -525,7 +542,10 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     frame.render_widget(Paragraph::new(kev), kev_area);
 
     let width = hn_area.width as usize;
-    let mut hn = vec![header("HACKER NEWS // FRONT PAGE"), Line::default()];
+    let mut hn = vec![
+        header_src("HACKER NEWS // FRONT PAGE", "firebase"),
+        Line::default(),
+    ];
     match app.readings.get(&SourceId::Hn) {
         Some(Reading::Hn(stories)) => {
             for (rank, s) in stories.iter().enumerate() {
@@ -680,10 +700,13 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
 
     let width = list.width as usize;
     let mut lines = vec![
-        header(format!(
-            "{} EVENTS // NEARBY 7 DAYS · M4.5+ WORLDWIDE 24H",
-            quakes.len()
-        )),
+        header_src(
+            format!(
+                "{} EVENTS // NEARBY 7 DAYS · M4.5+ WORLDWIDE 24H",
+                quakes.len()
+            ),
+            "usgs",
+        ),
         Line::default(),
     ];
     for q in quakes {
@@ -871,11 +894,14 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
 
     let width = list.width as usize;
     let mut lines = vec![
-        header(format!(
-            "{} CONTACTS // {}",
-            contacts.len(),
-            distance(sector.flight_radius_km, sector.units)
-        )),
+        header_src(
+            format!(
+                "{} CONTACTS // {}",
+                contacts.len(),
+                distance(sector.flight_radius_km, sector.units)
+            ),
+            "opensky",
+        ),
         Line::from(vec![
             Span::styled("■ ", Style::new().fg(theme::YELLOW)),
             label("below FL100  "),
