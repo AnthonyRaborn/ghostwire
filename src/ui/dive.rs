@@ -328,7 +328,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     // alongside the current-conditions fields, once there's width for all three
     // columns; the forecast chart below always gets the full row regardless.
     let show_nowcast = area.width >= 116 && !w.precip_next.is_empty();
-    let top_height = if show_nowcast { 13 } else { 9 };
+    let top_height = if show_nowcast { 14 } else { 9 };
     let [top, _, bottom] = Layout::vertical([
         Constraint::Length(top_height),
         Constraint::Length(1),
@@ -529,7 +529,7 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
     // the ring — it's the one thing every wedge shares, so it only needs saying once.
     let [title, legend, scope, wind_line] = Layout::vertical([
         Constraint::Length(1),
-        Constraint::Length(1),
+        Constraint::Length(2),
         Constraint::Min(6),
         Constraint::Length(1),
     ])
@@ -541,17 +541,30 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
         )),
         title,
     );
-    let mut legend_spans = Vec::new();
+    // Folds onto a second line rather than clipping — four hours' worth of "+Nh XX%
+    // Y.Ymm" rarely fits one line at this column's width.
+    let legend_width = legend.width as usize;
+    let mut legend_lines = Vec::new();
+    let mut line: Vec<Span> = Vec::new();
+    let mut line_width = 0;
     for (i, p) in w.precip_next.iter().enumerate() {
-        if i > 0 {
-            legend_spans.push(label(" · "));
+        let entry = format!("+{}h {:.0}% {:.1}mm", i + 1, p.prob, p.mm);
+        let sep_width = if line.is_empty() { 0 } else { 3 };
+        if line_width + sep_width + entry.len() > legend_width && !line.is_empty() {
+            legend_lines.push(Line::from(std::mem::take(&mut line)));
+            line_width = 0;
         }
-        legend_spans.push(Span::styled(
-            format!("+{}h {:.0}% {:.1}mm", i + 1, p.prob, p.mm),
-            Style::new().fg(precip_color(p.prob)),
-        ));
+        if !line.is_empty() {
+            line.push(label(" · "));
+            line_width += 3;
+        }
+        line_width += entry.len();
+        line.push(Span::styled(entry, Style::new().fg(precip_color(p.prob))));
     }
-    frame.render_widget(Paragraph::new(Line::from(legend_spans)), legend);
+    if !line.is_empty() {
+        legend_lines.push(Line::from(line));
+    }
+    frame.render_widget(Paragraph::new(legend_lines), legend);
 
     let hours = w.precip_next.len() as f64;
     // A filled wedge per hour, all on the wind bearing (still the one honest spatial
