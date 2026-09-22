@@ -511,9 +511,9 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
                     )),
                 ];
                 kev.push(row(left, right, width));
-                if !v.name.is_empty() {
+                for line in wrap(&v.name, width.saturating_sub(2), 2) {
                     kev.push(Line::styled(
-                        format!("  {}", fit(&v.name, width - 2)),
+                        format!("  {line}"),
                         Style::new().fg(theme::MUTED),
                     ));
                 }
@@ -529,10 +529,19 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     match app.readings.get(&SourceId::Hn) {
         Some(Reading::Hn(stories)) => {
             for (rank, s) in stories.iter().enumerate() {
-                hn.push(Line::from(vec![
-                    Span::styled(format!("{:>2}. ", rank + 1), Style::new().fg(theme::CYAN)),
-                    value(fit(&s.title, width.saturating_sub(4))),
-                ]));
+                for (i, line) in wrap(&s.title, width.saturating_sub(4), 2).into_iter().enumerate() {
+                    if i == 0 {
+                        hn.push(Line::from(vec![
+                            Span::styled(
+                                format!("{:>2}. ", rank + 1),
+                                Style::new().fg(theme::CYAN),
+                            ),
+                            value(line),
+                        ]));
+                    } else {
+                        hn.push(Line::from(vec![Span::raw("    "), value(line)]));
+                    }
+                }
                 hn.push(Line::styled(
                     format!(
                         "    {}▲  {} comments  {} ago",
