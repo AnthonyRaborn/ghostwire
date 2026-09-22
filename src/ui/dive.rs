@@ -594,7 +594,8 @@ fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
             wedges: &wedges,
             rings: w.precip_next.len() as u32,
             sweep: sweep(),
-            range_label: &format!("+{hours:.0}h"),
+            // Already said in the legend above and the wind line below.
+            range_label: None,
             empty_note: note,
         },
     );
@@ -844,7 +845,7 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
             wedges: &[],
             rings: radar::DEFAULT_RINGS,
             sweep: sweep(),
-            range_label: &distance(sector.radius_km, sector.units),
+            range_label: Some(&distance(sector.radius_km, sector.units)),
             empty_note: note,
         },
     );
@@ -1048,7 +1049,7 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
             wedges: &[],
             rings: radar::DEFAULT_RINGS,
             sweep: sweep(),
-            range_label: &distance(sector.flight_radius_km, sector.units),
+            range_label: Some(&distance(sector.flight_radius_km, sector.units)),
             empty_note: None,
         },
     );

@@ -70,7 +70,10 @@ pub struct Scope<'a> {
     /// rings mean something instead of being an arbitrary reference grid.
     pub rings: u32,
     pub sweep: f64,
-    pub range_label: &'a str,
+    /// Printed near the edge of the outermost ring — the scale of the whole scope
+    /// (e.g. "300km"). Skip it where that's already said elsewhere (the precip
+    /// nowcast's legend and wind line cover it) rather than repeat it on-scope.
+    pub range_label: Option<&'a str>,
     pub empty_note: Option<&'a str>,
 }
 
@@ -132,12 +135,14 @@ pub fn draw(frame: &mut Frame, area: Rect, scope: &Scope) {
             // North-up always, so only North needs marking.
             let (nx, ny) = point(r * 0.92, 0.0);
             ctx.print(nx, ny, Span::styled("N", Style::new().fg(theme::MUTED)));
-            let (x, y) = point(r * 0.99, 135.0);
-            ctx.print(
-                x,
-                y,
-                Span::styled(range_label.to_string(), Style::new().fg(theme::MUTED)),
-            );
+            if let Some(range_label) = range_label {
+                let (x, y) = point(r * 0.99, 135.0);
+                ctx.print(
+                    x,
+                    y,
+                    Span::styled(range_label.to_string(), Style::new().fg(theme::MUTED)),
+                );
+            }
             if let Some(note) = empty_note {
                 let x = -(note.chars().count() as f64) / f64::from(scope.width.max(1)) * r;
                 ctx.print(
