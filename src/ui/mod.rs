@@ -176,7 +176,7 @@ mod tests {
             ] {
                 assert!(screen.contains(title), "{title} missing at {w}x{h}");
             }
-            assert!(screen.contains("uplink 8/8"));
+            assert!(screen.contains("uplink 9/9"));
             assert!(screen.contains("all links nominal"));
         }
     }
@@ -206,7 +206,7 @@ mod tests {
     #[ignore = "network"]
     async fn live_feeds_render() {
         use crate::feeds::Feed;
-        use crate::feeds::{coingecko, finnhub, hn, kev, open_meteo, opensky, swpc, usgs};
+        use crate::feeds::{coingecko, finnhub, hn, kev, open_meteo, opensky, orbit, swpc, usgs};
         use crate::keys::{self, Keys};
         use crate::source::Link;
 
@@ -220,14 +220,15 @@ mod tests {
         let keys_path = keys::path_beside(&crate::paths::config_path().unwrap());
         let (keys, _) = Keys::load(&keys_path).unwrap();
         let has_finnhub = keys.finnhub().is_some();
-        let (stocks, crypto, weather, sky, quakes) = (
+        let (stocks, crypto, weather, sky, quakes, orbit) = (
             finnhub::Finnhub::new(&config, keys.finnhub(), None),
             coingecko::CoinGecko::new(&config, keys.coingecko()),
             open_meteo::OpenMeteo::new(&config),
             opensky::OpenSky::new(&config),
             usgs::Usgs::new(&config),
+            orbit::Orbit::new(&config),
         );
-        let (stocks, crypto, weather, news, vulns, quakes, space, sky) = tokio::join!(
+        let (stocks, crypto, weather, news, vulns, quakes, space, sky, iss) = tokio::join!(
             stocks.fetch(&http),
             crypto.fetch(&http),
             weather.fetch(&http),
@@ -236,6 +237,7 @@ mod tests {
             quakes.fetch(&http),
             swpc::Swpc.fetch(&http),
             sky.fetch(&http),
+            orbit.fetch(&http),
         );
         let mut app = app_with(vec![
             (SourceId::Stocks, stocks),
@@ -246,6 +248,7 @@ mod tests {
             (SourceId::Quakes, quakes),
             (SourceId::Swpc, space),
             (SourceId::OpenSky, sky),
+            (SourceId::Orbit, iss),
         ]);
         app.config = config;
         let screen = render(&app, 132, 34);

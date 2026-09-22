@@ -18,6 +18,8 @@ pub const QUAKE_MAG: f64 = 4.0;
 const QUAKE_RECENT_HOURS: i64 = 6;
 pub const STORM_KP: f64 = 5.0;
 const STORM_REARM_KP: f64 = 4.5;
+/// A pass worth announcing, not just grazing the horizon.
+pub const ORBIT_VISIBLE_DEG: f64 = 10.0;
 
 /// What to announce, one line per event. Empty when nothing notable happened.
 pub fn detect(
@@ -81,6 +83,25 @@ pub fn detect(
             }
             _ => Vec::new(),
         },
+        Reading::Orbit(sats) => {
+            // Re-arms once it's dropped back below the horizon.
+            let armed = match old {
+                Some(Reading::Orbit(o)) => o.first().is_none_or(|s| s.elevation_deg < 0.0),
+                _ => true,
+            };
+            sats.first()
+                .filter(|s| armed && s.elevation_deg >= ORBIT_VISIBLE_DEG)
+                .map(|s| {
+                    format!(
+                        "{} PASS {:.0}° {}",
+                        s.name,
+                        s.elevation_deg,
+                        geo::compass(s.bearing)
+                    )
+                })
+                .into_iter()
+                .collect()
+        }
         Reading::Weather(_) | Reading::Hn(_) | Reading::OpenSky(_) => Vec::new(),
     }
 }
@@ -105,7 +126,7 @@ mod tests {
     use chrono::Duration;
 
     use super::*;
-    use crate::reading::{Quake, Scales, SpaceWeather, Vuln};
+    use crate::reading::{Quake, Satellite, Scales, SpaceWeather, Vuln};
 
     fn quote(symbol: &str, change_pct: f64) -> Quote {
         Quote {
@@ -209,5 +230,37 @@ mod tests {
             ["NEW KEV CVE-2 Acme Router"]
         );
         assert!(detect(None, &new, &sector, now).is_empty());
+    }
+
+    fn orbit(elevation_deg: f64) -> Reading {
+        Reading::Orbit(vec![Satellite {
+            name: "ISS".into(),
+            altitude_km: 417.0,
+            velocity_kmh: 27_600.0,
+            sunlit: true,
+            distance_km: 100.0,
+            bearing: 45.0,
+            elevation_deg,
+        }])
+    }
+
+    #[test]
+    fn orbit_passes_fire_once_per_crossing() {
+        let sector = Sector::default();
+        let now = Utc::now();
+        assert_eq!(
+            detect(None, &orbit(15.0), &sector, now),
+            ["ISS PASS 15° NE"]
+        );
+        // Still climbing, or descending but still up: no repeat announcement.
+        assert!(detect(Some(&orbit(15.0)), &orbit(40.0), &sector, now).is_empty());
+        assert!(detect(Some(&orbit(40.0)), &orbit(12.0), &sector, now).is_empty());
+        // Drops below the horizon, then climbs again: re-arms.
+        assert_eq!(
+            detect(Some(&orbit(-5.0)), &orbit(11.0), &sector, now).len(),
+            1
+        );
+        // Never clears the "worth announcing" bar.
+        assert!(detect(None, &orbit(4.0), &sector, now).is_empty());
     }
 }

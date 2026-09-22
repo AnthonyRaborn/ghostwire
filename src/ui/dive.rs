@@ -16,7 +16,7 @@ use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
-use crate::reading::{Quake, Quote, Reading, Weather, xray_class};
+use crate::reading::{Quake, Quote, Reading, Satellite, Weather, xray_class};
 use crate::source::{NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -847,7 +847,43 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
         ))];
         lines.push(row(left, right, width));
     }
+    if let Some(Reading::Orbit(sats)) = app.readings.get(&SourceId::Orbit)
+        && let Some(s) = sats.first()
+    {
+        lines.push(Line::default());
+        lines.push(orbit_line(s, sector, width));
+    }
     frame.render_widget(Paragraph::new(lines), list);
+}
+
+/// A single detail line for the ISS — wheretheiss.at only tracks the one object, so
+/// there's no list to speak of, just its current numbers.
+fn orbit_line(s: &Satellite, sector: &crate::config::Sector, width: usize) -> Line<'static> {
+    let visible = s.elevation_deg > 0.0;
+    let color = if visible { theme::CYAN } else { theme::MUTED };
+    let left = vec![
+        Span::styled(format!("{:<9}", fit(&s.name, 8)), Style::new().fg(color)),
+        value(format!(
+            "{:.0}km alt  {:.0}km/h  {}",
+            s.altitude_km,
+            s.velocity_kmh,
+            if s.sunlit { "SUNLIT" } else { "SHADOW" }
+        )),
+    ];
+    let right = vec![Span::styled(
+        if visible {
+            format!(
+                "↑{:.0}° {} {}",
+                s.elevation_deg,
+                geo::compass(s.bearing),
+                distance(s.distance_km, sector.units)
+            )
+        } else {
+            "below horizon".to_string()
+        },
+        Style::new().fg(color),
+    )];
+    row(left, right, width)
 }
 
 fn altitude_color(altitude_m: Option<f64>) -> Color {

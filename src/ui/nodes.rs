@@ -14,7 +14,7 @@ use super::text::{ago, bar, distance, fit, price, row, spark, spinner, width_of}
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::{self, Fx};
-use crate::reading::{Quake, Quote, Reading, SpaceWeather};
+use crate::reading::{Quake, Quote, Reading, Satellite, SpaceWeather};
 use crate::source::{Link, NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -432,7 +432,32 @@ fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
         );
         lines.push(row(vec![value(left)], vec![label(right)], width));
     }
+    if app.sources.contains_key(&SourceId::Orbit) {
+        match app.readings.get(&SourceId::Orbit) {
+            Some(Reading::Orbit(sats)) => {
+                if let Some(s) = sats.first() {
+                    lines.push(orbit_line(s, width));
+                }
+            }
+            _ => lines.push(awaiting(app, SourceId::Orbit)),
+        }
+    }
     lines
+}
+
+fn orbit_line(s: &Satellite, width: usize) -> Line<'static> {
+    let visible = s.elevation_deg > 0.0;
+    let color = if visible { theme::CYAN } else { theme::MUTED };
+    let left = format!("{:<8} {:>4.0}km", fit(&s.name, 8), s.altitude_km);
+    let right = if visible {
+        vec![Span::styled(
+            format!("↑{:.0}° {}", s.elevation_deg, geo::compass(s.bearing)),
+            style(color),
+        )]
+    } else {
+        vec![label("below horizon")]
+    };
+    row(vec![Span::styled(left, style(color))], right, width)
 }
 
 pub(super) fn kp_color(kp: f64) -> Color {

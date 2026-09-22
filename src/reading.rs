@@ -15,6 +15,7 @@ pub enum Reading {
     Quakes(Vec<Quake>),
     Swpc(SpaceWeather),
     OpenSky(Vec<Contact>),
+    Orbit(Vec<Satellite>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +117,20 @@ pub struct Contact {
     pub heading: Option<f64>,
     pub distance_km: f64,
     pub bearing: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Satellite {
+    pub name: String,
+    pub altitude_km: f64,
+    pub velocity_kmh: f64,
+    /// Sunlit vs. in Earth's shadow — the upstream API's own read, not derived.
+    pub sunlit: bool,
+    /// Ground-track distance and bearing from the sector.
+    pub distance_km: f64,
+    pub bearing: f64,
+    /// Above the sector's horizon when positive.
+    pub elevation_deg: f64,
 }
 
 /// Solar flare class for a GOES X-ray flux, e.g. `2.3e-6` → `"C2.3"`.

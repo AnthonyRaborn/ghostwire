@@ -30,7 +30,7 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 | ATMOS // SECTOR | Temp, rain, wind, AQI, UV; dive adds a precip nowcast scope | Open-Meteo forecast + air-quality | None | 10m |
 | INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS | HN Firebase API, CISA KEV JSON | None | 5m / 1h |
 | SEISMIC // HELIOS | Quakes near you + big ones worldwide; Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | USGS GeoJSON feeds; NOAA SWPC JSON | None | 2m; 10m |
-| SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km) | OpenSky Network | None (400 credits/day anonymous; ≤25 sq° costs 1) | 5m |
+| SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km); adds the ISS's current position | OpenSky Network; wheretheiss.at | None (OpenSky: 400 credits/day anonymous, ≤25 sq° costs 1); None | 5m; 1m |
 
 A node can be fed by more than one source (ZAIBATSU = stocks + crypto, INTERCEPTS =
 HN + KEV + RSS, SEISMIC // HELIOS = quakes + space weather — both low-density feeds
@@ -271,3 +271,14 @@ live beside it in `readings/`.
   temp chart gets the full width otherwise. `radar::draw` was generalized to take a
   caller-supplied range label instead of always formatting km/mi, so a time-based scope
   didn't need its own drawing code.
+- [x] ORBIT, folded into SKYTRAFFIC — the ISS's live position from wheretheiss.at
+  (keyless; the only object that API tracks today). `NodeId::Sky` now carries
+  `SourceId::OpenSky` and `SourceId::Orbit`, same multi-source pattern as the other
+  merged nodes. Elevation above the sector's horizon is computed locally
+  (`geo::elevation_deg`, standard spherical formula) from the ISS's real lat/lon/altitude
+  and the sector fix — the API only gives raw position, not whether it's visible from
+  anywhere in particular. Not plotted on the aircraft radar scope (its ground-track
+  distance is usually far past the 150 km flight radius, and a second radius scope for
+  one point wasn't worth the complexity); grid tile and dive both show it as a detail
+  line instead, with a PRIORITY INTERCEPT when it climbs above 10° elevation (re-arms
+  once it drops back below the horizon).

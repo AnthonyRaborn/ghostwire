@@ -9,6 +9,7 @@ mod http;
 pub mod kev;
 pub mod open_meteo;
 pub mod opensky;
+pub mod orbit;
 pub mod swpc;
 pub mod usgs;
 
@@ -113,6 +114,7 @@ pub fn spawn_all(
             SourceId::Quakes => launcher.launch(usgs::Usgs::new(config)),
             SourceId::Swpc => launcher.launch(swpc::Swpc),
             SourceId::OpenSky => launcher.launch(opensky::OpenSky::new(config)),
+            SourceId::Orbit => launcher.launch(orbit::Orbit::new(config)),
         }
     }
     launcher.started

@@ -13,7 +13,8 @@ use super::{Feed, FetchError};
 use crate::config::{Config, Units};
 use crate::geo;
 use crate::reading::{
-    Contact, PrecipHour, Quake, Quote, Reading, Scales, SpaceWeather, Story, Vuln, Weather,
+    Contact, PrecipHour, Quake, Quote, Reading, Satellite, Scales, SpaceWeather, Story, Vuln,
+    Weather,
 };
 use crate::source::SourceId;
 
@@ -140,6 +141,10 @@ impl DemoFeed {
                 Reading::OpenSky(sky(c.clone(), self.flight_radius_km, rng))
             }
             (SourceId::OpenSky, _) => Reading::OpenSky(sky(Vec::new(), self.flight_radius_km, rng)),
+            (SourceId::Orbit, Some(Reading::Orbit(s))) => {
+                Reading::Orbit(orbit(s.first().cloned(), rng))
+            }
+            (SourceId::Orbit, _) => Reading::Orbit(orbit(None, rng)),
         }
     }
 }
@@ -499,6 +504,28 @@ fn sky(mut contacts: Vec<Contact>, radius_km: f64, rng: &mut Rng) -> Vec<Contact
     }
     contacts.sort_by(|a, b| a.distance_km.total_cmp(&b.distance_km));
     contacts
+}
+
+fn orbit(prev: Option<Satellite>, rng: &mut Rng) -> Vec<Satellite> {
+    let mut s = prev.unwrap_or_else(|| Satellite {
+        name: "ISS".into(),
+        altitude_km: 417.0,
+        velocity_kmh: 27_600.0,
+        sunlit: true,
+        distance_km: rng.f64() * 3_000.0,
+        bearing: rng.f64() * 360.0,
+        elevation_deg: 0.0,
+    });
+    s.altitude_km = (s.altitude_km + jitter(rng) * 2.0).clamp(408.0, 425.0);
+    s.velocity_kmh = (s.velocity_kmh + jitter(rng) * 20.0).clamp(27_500.0, 27_700.0);
+    // The ISS crosses a whole horizon-to-horizon pass in a few minutes.
+    s.distance_km = (s.distance_km + jitter(rng) * 350.0).rem_euclid(3_000.0);
+    s.bearing = (s.bearing + jitter(rng) * 15.0).rem_euclid(360.0);
+    s.elevation_deg = geo::elevation_deg(s.distance_km, s.altitude_km);
+    if rng.f64() < 0.05 {
+        s.sunlit = !s.sunlit;
+    }
+    vec![s]
 }
 
 fn new_contact(rng: &mut Rng, radius_km: f64) -> Contact {
