@@ -396,6 +396,9 @@ pub(super) fn mag_color(mag: f64) -> Color {
     }
 }
 
+/// Aircraft get top billing; ORBIT is a single summary line pinned to the bottom.
+const MAX_SKY_LINES: usize = 6;
+
 fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
     let Some(Reading::OpenSky(contacts)) = app.readings.get(&SourceId::OpenSky) else {
         return Vec::new();
@@ -411,7 +414,9 @@ fn sky(app: &App, width: usize) -> Vec<Line<'static>> {
             distance(app.config.sector.flight_radius_km, units)
         )),
     ])];
-    for c in contacts {
+    // Capped so a busy airspace can't push the ORBIT line off the bottom of the tile —
+    // the full list is still there on the dive.
+    for c in contacts.iter().take(MAX_SKY_LINES) {
         let flight_level = c.altitude_m.map_or_else(
             || "FL---".to_string(),
             |m| format!("FL{:03.0}", (m / 30.48).max(0.0)),

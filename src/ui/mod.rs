@@ -338,6 +338,46 @@ mod tests {
     }
 
     #[test]
+    fn orbit_stays_on_screen_in_a_busy_airspace() {
+        use crate::reading::{Contact, Satellite};
+
+        let contacts = (0..20)
+            .map(|i| Contact {
+                callsign: format!("TST{i}"),
+                altitude_m: Some(5_000.0),
+                speed_ms: Some(200.0),
+                heading: Some(90.0),
+                distance_km: f64::from(i),
+                bearing: 90.0,
+            })
+            .collect();
+        let satellite = vec![Satellite {
+            name: "ISS".into(),
+            altitude_km: 417.0,
+            velocity_kmh: 27_600.0,
+            sunlit: true,
+            distance_km: 100.0,
+            bearing: 45.0,
+            // Below the intercept threshold, so this doesn't also land in the ticker
+            // as a priority-intercept banner and give a false pass.
+            elevation_deg: 5.0,
+        }];
+        let app = app_with(vec![
+            (
+                SourceId::OpenSky,
+                Ok(crate::reading::Reading::OpenSky(contacts)),
+            ),
+            (
+                SourceId::Orbit,
+                Ok(crate::reading::Reading::Orbit(satellite)),
+            ),
+        ]);
+        let screen = render(&app, 132, 30);
+        assert!(!screen.contains("PRIORITY INTERCEPT"), "{screen}");
+        assert!(screen.contains("ISS"), "{screen}");
+    }
+
+    #[test]
     fn atmos_drops_the_nowcast_radar_when_narrow() {
         let mut app = demo_app();
         app.dive.dive_now(NodeId::Atmos, Instant::now());
