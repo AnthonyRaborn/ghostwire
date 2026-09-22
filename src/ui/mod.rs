@@ -268,7 +268,7 @@ mod tests {
     fn every_node_dives() {
         let expected = [
             (NodeId::Zaibatsu, vec!["CRYPTO // 7 DAYS"]),
-            (NodeId::Atmos, vec!["NEXT 24H //"]),
+            (NodeId::Atmos, vec!["NEXT 24H //", "PRECIP NOWCAST //"]),
             (NodeId::Intercepts, vec!["HACKER NEWS // FRONT PAGE"]),
             (
                 NodeId::Seismic,
@@ -332,5 +332,14 @@ mod tests {
             let screen = render(&app, MIN_W, MIN_H);
             assert!(screen.contains("◢ DIVE //"), "{node:?}: {screen}");
         }
+    }
+
+    #[test]
+    fn atmos_drops_the_nowcast_radar_when_narrow() {
+        let mut app = demo_app();
+        app.dive.dive_now(NodeId::Atmos, Instant::now());
+        let screen = render(&app, MIN_W, 34);
+        assert!(screen.contains("NEXT 24H //"), "{screen}");
+        assert!(!screen.contains("PRECIP NOWCAST"), "{screen}");
     }
 }

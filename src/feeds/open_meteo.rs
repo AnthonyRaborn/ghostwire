@@ -8,8 +8,11 @@ use serde::Deserialize;
 use super::http::{get_text, parse_json};
 use super::{Feed, FetchError};
 use crate::config::{Config, Units};
-use crate::reading::{Reading, Weather};
+use crate::reading::{PrecipHour, Reading, Weather};
 use crate::source::SourceId;
+
+/// Hours of precipitation nowcast to keep, beyond the current hour.
+const PRECIP_HOURS: usize = 4;
 
 pub struct OpenMeteo {
     fix: Option<(f64, f64)>,
@@ -46,7 +49,8 @@ impl Feed for OpenMeteo {
             "https://api.open-meteo.com/v1/forecast?latitude={lat:.4}&longitude={lon:.4}\
              &current=temperature_2m,apparent_temperature,relative_humidity_2m,\
              wind_speed_10m,wind_direction_10m,weather_code,is_day\
-             &hourly=temperature_2m,precipitation_probability&forecast_hours=24{units}"
+             &hourly=temperature_2m,precipitation_probability,precipitation\
+             &forecast_hours=24{units}"
         );
         let air_url = format!(
             "https://air-quality-api.open-meteo.com/v1/air-quality\
@@ -88,6 +92,7 @@ struct Current {
 struct Hourly {
     temperature_2m: Vec<Option<f64>>,
     precipitation_probability: Vec<Option<f64>>,
+    precipitation: Vec<Option<f64>>,
 }
 
 #[derive(Deserialize)]
@@ -128,6 +133,18 @@ pub fn parse(forecast: &str, air: Option<&str>, units: Units) -> Result<Weather,
         us_aqi: air.as_ref().and_then(|a| a.us_aqi),
         uv_index: air.as_ref().and_then(|a| a.uv_index),
         next_24h: hourly.temperature_2m.into_iter().flatten().collect(),
+        // Skip index 0 (the current hour, already in `precip_prob`).
+        precip_next: hourly
+            .precipitation_probability
+            .into_iter()
+            .zip(hourly.precipitation)
+            .skip(1)
+            .take(PRECIP_HOURS)
+            .map(|(prob, mm)| PrecipHour {
+                prob: prob.unwrap_or(0.0),
+                mm: mm.unwrap_or(0.0),
+            })
+            .collect(),
     })
 }
 
@@ -150,6 +167,8 @@ mod tests {
         assert_eq!(w.next_24h.len(), 24);
         assert_eq!(w.us_aqi, Some(51.0));
         assert_eq!(w.uv_index, Some(0.0));
+        assert_eq!(w.precip_next.len(), PRECIP_HOURS);
+        assert_eq!(w.precip_next[0].prob, 0.0);
     }
 
     #[test]

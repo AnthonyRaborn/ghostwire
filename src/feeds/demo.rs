@@ -12,7 +12,9 @@ use fastrand::Rng;
 use super::{Feed, FetchError};
 use crate::config::{Config, Units};
 use crate::geo;
-use crate::reading::{Contact, Quake, Quote, Reading, Scales, SpaceWeather, Story, Vuln, Weather};
+use crate::reading::{
+    Contact, PrecipHour, Quake, Quote, Reading, Scales, SpaceWeather, Story, Vuln, Weather,
+};
 use crate::source::SourceId;
 
 const SPARK_LEN: usize = 48;
@@ -270,6 +272,12 @@ fn seed_weather(units: Units) -> Weather {
         next_24h: (0..24)
             .map(|h| temp + swing * (f64::from(h) / 24.0 * TAU).sin())
             .collect(),
+        precip_next: (1..=4)
+            .map(|h| PrecipHour {
+                prob: (20.0 + f64::from(h) * 12.0).min(90.0),
+                mm: f64::from(h) * 0.15,
+            })
+            .collect(),
     }
 }
 
@@ -286,6 +294,10 @@ fn weather(mut w: Weather, rng: &mut Rng) -> Weather {
     w.us_aqi = w.us_aqi.map(|a| (a + jitter(rng) * 4.0).clamp(5.0, 220.0));
     w.uv_index = w.uv_index.map(|u| (u + jitter(rng) * 0.3).clamp(0.0, 11.0));
     w.next_24h.rotate_left(1);
+    for hour in &mut w.precip_next {
+        hour.prob = (hour.prob + jitter(rng) * 5.0).clamp(0.0, 100.0);
+        hour.mm = (hour.mm + jitter(rng) * 0.1).max(0.0);
+    }
     w
 }
 

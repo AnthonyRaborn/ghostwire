@@ -45,6 +45,15 @@ pub struct Weather {
     pub uv_index: Option<f64>,
     /// Hourly temperature for the next 24h.
     pub next_24h: Vec<f64>,
+    /// Precipitation probability and amount for each of the next few hours.
+    pub precip_next: Vec<PrecipHour>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PrecipHour {
+    pub prob: f64,
+    /// Millimeters, whatever the display units — Open-Meteo always reports metric here.
+    pub mm: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

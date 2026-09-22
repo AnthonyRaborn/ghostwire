@@ -16,7 +16,7 @@ use super::{bigtext, radar};
 use crate::app::App;
 use crate::config::Units;
 use crate::fx::Fx;
-use crate::reading::{Quake, Quote, Reading, xray_class};
+use crate::reading::{Quake, Quote, Reading, Weather, xray_class};
 use crate::source::{NodeId, SourceId};
 use crate::{geo, lexicon, theme};
 
@@ -345,6 +345,20 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
     if w.next_24h.is_empty() {
         return;
     }
+    // A nowcast radar needs real width to read as round rather than squashed.
+    let chart_area = if bottom.width >= 90 && !w.precip_next.is_empty() {
+        let [chart_area, _, radar_area] = Layout::horizontal([
+            Constraint::Min(40),
+            Constraint::Length(2),
+            Constraint::Length(34),
+        ])
+        .areas(bottom);
+        precip_nowcast(frame, radar_area, w);
+        chart_area
+    } else {
+        bottom
+    };
+
     let lo = w.next_24h.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = w.next_24h.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let [title, graph, labels] = Layout::vertical([
@@ -352,7 +366,7 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Min(1),
         Constraint::Length(1),
     ])
-    .areas(bottom);
+    .areas(chart_area);
     frame.render_widget(
         Paragraph::new(header(format!("NEXT 24H // {lo:.0}–{hi:.0}{deg}"))),
         title,
@@ -365,6 +379,81 @@ fn atmos(frame: &mut Frame, area: Rect, app: &App) {
         )),
         labels,
     );
+}
+
+/// Precipitation drifting in with the wind: bearing is the direction it's coming from
+/// (the surface wind reading), radius is hours until it arrives. Real hourly data, an
+/// interpretive layout — there's no spatial radar feed behind ATMOS, just a forecast.
+fn precip_nowcast(frame: &mut Frame, area: Rect, w: &Weather) {
+    // A legend line rather than on-scope labels: every hour sits on the same bearing
+    // (the wind), so labels next to each point would stack on top of one another.
+    let [title, legend, scope] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(8),
+    ])
+    .areas(area);
+    frame.render_widget(
+        Paragraph::new(header(format!(
+            "PRECIP NOWCAST // NEXT {}H",
+            w.precip_next.len()
+        ))),
+        title,
+    );
+    let mut legend_spans = Vec::new();
+    for (i, p) in w.precip_next.iter().enumerate() {
+        if i > 0 {
+            legend_spans.push(label(" · "));
+        }
+        legend_spans.push(Span::styled(
+            format!("+{}h {:.0}%", i + 1, p.prob),
+            Style::new().fg(precip_color(p.prob)),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(legend_spans)), legend);
+
+    let hours = w.precip_next.len() as f64;
+    let blips: Vec<radar::Blip> = w
+        .precip_next
+        .iter()
+        .enumerate()
+        .map(|(i, p)| radar::Blip {
+            r: i as f64 + 1.0,
+            bearing: w.wind_from,
+            glyph: precip_glyph(p.mm).into(),
+            color: precip_color(p.prob),
+            label: None,
+        })
+        .collect();
+    let clear = w.precip_next.iter().all(|p| p.prob < 10.0);
+    let note = clear.then_some("NOTHING INCOMING");
+    radar::draw(
+        frame,
+        scope,
+        hours,
+        &blips,
+        sweep(),
+        &format!("+{hours:.0}h"),
+        note,
+    );
+}
+
+fn precip_glyph(mm: f64) -> char {
+    match mm {
+        m if m < 0.1 => '·',
+        m if m < 0.5 => '•',
+        m if m < 2.0 => '●',
+        _ => '◉',
+    }
+}
+
+fn precip_color(prob: f64) -> Color {
+    match prob {
+        p if p < 20.0 => theme::MUTED,
+        p if p < 50.0 => theme::CYAN,
+        p if p < 75.0 => theme::YELLOW,
+        _ => theme::MAGENTA,
+    }
 }
 
 fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
@@ -505,7 +594,7 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         .iter()
         .enumerate()
         .map(|(i, q)| radar::Blip {
-            distance_km: q.distance_km.unwrap_or_default(),
+            r: q.distance_km.unwrap_or_default(),
             bearing: q.bearing.unwrap_or_default(),
             glyph: quake_glyph(q.mag).into(),
             color: blip_color(q.mag),
@@ -519,7 +608,7 @@ fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         sector.radius_km,
         &blips,
         sweep(),
-        sector.units,
+        &distance(sector.radius_km, sector.units),
         note,
     );
 
@@ -697,7 +786,7 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, c)| radar::Blip {
-            distance_km: c.distance_km,
+            r: c.distance_km,
             bearing: c.bearing,
             glyph: c.heading.map_or('•', geo::arrow).to_string(),
             color: altitude_color(c.altitude_m),
@@ -710,7 +799,7 @@ fn sky(frame: &mut Frame, area: Rect, app: &App) {
         sector.flight_radius_km,
         &blips,
         sweep(),
-        sector.units,
+        &distance(sector.flight_radius_km, sector.units),
         None,
     );
 

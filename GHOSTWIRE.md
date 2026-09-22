@@ -27,7 +27,7 @@ data decays, a failed request is ICE, and a rate limit is a trace.
 |---|---|---|---|---|
 | ZAIBATSU INDEX | Stock quotes | Finnhub | Free key | 60s in market hours, 15m otherwise |
 | | Crypto prices + 7d sparkline | CoinGecko `/coins/markets` | None (free demo key optional) | 2m |
-| ATMOS // SECTOR | Temp, rain, wind, AQI, UV | Open-Meteo forecast + air-quality | None | 10m |
+| ATMOS // SECTOR | Temp, rain, wind, AQI, UV; dive adds a precip nowcast scope | Open-Meteo forecast + air-quality | None | 10m |
 | INTERCEPTS | HN top stories, new CISA KEV entries, optional RSS | HN Firebase API, CISA KEV JSON | None | 5m / 1h |
 | SEISMIC // HELIOS | Quakes near you + big ones worldwide; Kp (1-min estimate + 72h of 3-hourly), X-ray flux, NOAA G/S/R scales | USGS GeoJSON feeds; NOAA SWPC JSON | None | 2m; 10m |
 | SKYTRAFFIC | Airborne aircraft within `flight_radius_km` (150 km) | OpenSky Network | None (400 credits/day anonymous; ≤25 sq° costs 1) | 5m |
@@ -54,7 +54,8 @@ open cell as a result — nothing lives there yet.
 ```
 
 Every 45s the rig **dives** into one node: it takes over the grid for 15s with detail
-(bar charts, full lists, a radar scope with a rotating sweep for quakes and flights),
+(bar charts, full lists, a radar scope with a rotating sweep for quakes, flights, and —
+on ATMOS, when the terminal's wide enough — a precip nowcast),
 then surfaces. Nodes take turns in grid order, skipping any with nothing to show.
 ("Breach" means fetching — `» breaching`, `[r] re-breach` — so the full-screen view got
 its own word.)
@@ -259,3 +260,14 @@ live beside it in `readings/`.
   (big Kp digit, gauge, 72h chart, X-ray, scales) — sized so the big digit doesn't get
   clipped. The grid now has one open cell (5 nodes in a 3×2/2×3 layout) for whatever
   comes next.
+- [x] ATMOS precip nowcast — no spatial radar feed exists behind ATMOS (Open-Meteo is a
+  point forecast), so rather than fake a storm-cell shape, the dive reuses the existing
+  radar scope as an honest reinterpretation: bearing is the real surface wind direction
+  (the direction precip is coming from), radius is real forecast hours (+1h..+4h) with
+  probability and amount from Open-Meteo's hourly `precipitation`/`precipitation_probability`.
+  A compact legend line (`+1h 36% · +2h 44% · ...`) sits above the scope instead of
+  on-scope labels, since every hour shares one bearing and labels there would stack.
+  Only shown when the dive is wide enough (≥90 cols) for the scope to read as round; the
+  temp chart gets the full width otherwise. `radar::draw` was generalized to take a
+  caller-supplied range label instead of always formatting km/mi, so a time-based scope
+  didn't need its own drawing code.

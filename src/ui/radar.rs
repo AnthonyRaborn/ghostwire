@@ -8,8 +8,6 @@ use ratatui::symbols::Marker;
 use ratatui::text::Span;
 use ratatui::widgets::canvas::{Canvas, Circle, Line as CanvasLine};
 
-use super::text::distance;
-use crate::config::Units;
 use crate::theme;
 
 /// One full turn of the sweep.
@@ -19,7 +17,9 @@ const GLOW_DEG: f64 = 120.0;
 const RINGS: u32 = 3;
 
 pub struct Blip {
-    pub distance_km: f64,
+    /// Radial distance from center, in whatever unit the scope's `range` is (km for a
+    /// quake/flight scope, forecast hours for a time-based one).
+    pub r: f64,
     pub bearing: f64,
     pub glyph: String,
     pub color: Color,
@@ -53,14 +53,14 @@ fn scope_area(area: Rect) -> Rect {
 pub fn draw(
     frame: &mut Frame,
     area: Rect,
-    range_km: f64,
+    range: f64,
     blips: &[Blip],
     sweep: f64,
-    units: Units,
+    range_label: &str,
     empty_note: Option<&str>,
 ) {
     let scope = scope_area(area);
-    let r = range_km;
+    let r = range;
     let point = |d: f64, deg: f64| {
         let rad = deg.to_radians();
         (d * rad.sin(), d * rad.cos())
@@ -98,7 +98,7 @@ pub fn draw(
             ctx.print(
                 x,
                 y,
-                Span::styled(distance(r, units), Style::new().fg(theme::MUTED)),
+                Span::styled(range_label.to_string(), Style::new().fg(theme::MUTED)),
             );
             if let Some(note) = empty_note {
                 let x = -(note.chars().count() as f64) / f64::from(scope.width.max(1)) * r;
@@ -108,8 +108,8 @@ pub fn draw(
                     Span::styled(note.to_string(), Style::new().fg(theme::MUTED)),
                 );
             }
-            for blip in blips.iter().filter(|b| b.distance_km <= r) {
-                let (x, y) = point(blip.distance_km, blip.bearing);
+            for blip in blips.iter().filter(|b| b.r <= r) {
+                let (x, y) = point(blip.r, blip.bearing);
                 let behind = (sweep - blip.bearing).rem_euclid(360.0);
                 let dim = if behind < GLOW_DEG {
                     behind / GLOW_DEG * 0.7
