@@ -216,6 +216,28 @@ mod tests {
         assert!(screen.contains("NO UPLINK"));
     }
 
+    #[test]
+    fn a_shared_failure_takes_one_ticker_entry() {
+        let refused = "tcp connect error: Connection refused (os error 111)";
+        let mut results: Vec<_> = SourceId::ALL
+            .into_iter()
+            .map(|id| (id, Err(FetchError::Failed(refused.into()))))
+            .collect();
+        results[0].1 = Err(FetchError::NotConfigured("set [sector] lat/lon".into()));
+        results[1].1 = Err(FetchError::NotConfigured("set [sector] lat/lon".into()));
+        results[2].1 = Err(FetchError::Failed("HTTP 503".into()));
+        let app = app_with(results);
+        let screen = render(&app, 80, 36);
+        let ticker = screen.lines().last().unwrap();
+        println!("{ticker}");
+        assert!(ticker.starts_with(" 2 LINKS: OFFLINE — set [sector] lat/lon ░ +2 more"));
+        let screen = render(&app, 200, 36);
+        let ticker = screen.lines().last().unwrap();
+        println!("{ticker}");
+        assert!(ticker.contains("OPEN-METEO: ICE — HTTP 503, retry 30s"));
+        assert!(ticker.contains("9 LINKS: ICE — Connection refused, retry 30s"));
+    }
+
     /// Hits every real API once (one OpenSky credit):
     /// `cargo test live -- --ignored --nocapture`. Stocks stay OFFLINE unless
     /// a Finnhub key is in keys.toml or FINNHUB_API_KEY.

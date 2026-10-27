@@ -27,6 +27,9 @@ All notable changes to this project are documented here. The format follows
 
 - Sources in ICE or FLATLINED show why their last fetch failed, in the footer ticker
   and in the node, instead of only in the log.
+- Sources in the same trouble for the same reason share one ticker entry (e.g.
+  `9 LINKS: ICE — Connection refused, retry 5s`), and entries that don't fit drop off
+  whole behind a `+N more` count instead of running off the edge mid-word.
 
 ## [1.0.0] — ZERO-DAY
 
