@@ -1,7 +1,9 @@
 //! INTERCEPTS (RSS/Atom): headlines from whatever feeds `config.intercepts.rss` lists.
 //! `feed_rs` auto-detects the format (RSS 0.9x/1/2, Atom, JSON Feed) from the body, so
 //! one parser covers all of them. Every configured URL is fetched concurrently; a feed
-//! that fails just drops out, same as air quality alongside Open-Meteo's forecast.
+//! that fails just drops out, same as air quality alongside Open-Meteo's forecast. Each
+//! feed can rename itself and cap how many headlines it puts in the panel, so a busy
+//! feed can't push a quiet one out.
 
 use std::io::Cursor;
 use std::time::Duration;
@@ -10,20 +12,20 @@ use futures_util::future::join_all;
 
 use super::http::get_text;
 use super::{Feed, FetchError};
-use crate::config::Config;
+use crate::config::{Config, RssFeed};
 use crate::reading::{Headline, Reading};
 use crate::source::SourceId;
 
 const KEEP: usize = 8;
 
 pub struct Rss {
-    urls: Vec<String>,
+    feeds: Vec<RssFeed>,
 }
 
 impl Rss {
     pub fn new(config: &Config) -> Self {
         Self {
-            urls: config.intercepts.rss.clone(),
+            feeds: config.intercepts.rss.clone(),
         }
     }
 }
@@ -39,28 +41,52 @@ impl Feed for Rss {
     }
 
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
-        let bodies = join_all(self.urls.iter().map(|url| get_text(http.get(url)))).await;
-        let mut headlines: Vec<Headline> = bodies
+        let bodies = join_all(self.feeds.iter().map(|f| get_text(http.get(&f.url)))).await;
+        let per_feed = bodies
             .into_iter()
-            .zip(&self.urls)
-            .filter_map(|(body, url)| {
+            .zip(&self.feeds)
+            .filter_map(|(body, feed)| {
+                let url = &feed.url;
                 let text = body
                     .inspect_err(|e| tracing::warn!(url, "rss fetch: {e:?}"))
                     .ok()?;
                 parse_feed(&text)
                     .inspect_err(|e| tracing::warn!(url, "rss parse: {e}"))
                     .ok()
-            })
-            .flatten()
-            .collect();
+                    .map(|headlines| (feed, headlines))
+            });
+        let headlines = merge(per_feed);
         if headlines.is_empty() {
             return Err(FetchError::Failed("no feeds returned anything".into()));
         }
-        // Undated entries (Option::None) sort after every dated one.
-        headlines.sort_by_key(|h| std::cmp::Reverse(h.published));
-        headlines.truncate(KEEP);
         Ok(Reading::Rss(headlines))
     }
+}
+
+/// Each feed's newest headlines, up to its own `max` and under its own `name`, then
+/// the newest `KEEP` of all of them.
+fn merge<'a>(per_feed: impl IntoIterator<Item = (&'a RssFeed, Vec<Headline>)>) -> Vec<Headline> {
+    let mut all = Vec::new();
+    for (feed, mut headlines) in per_feed {
+        newest_first(&mut headlines);
+        if let Some(max) = feed.max {
+            headlines.truncate(max);
+        }
+        if let Some(name) = &feed.name {
+            for h in &mut headlines {
+                h.source = name.clone();
+            }
+        }
+        all.extend(headlines);
+    }
+    newest_first(&mut all);
+    all.truncate(KEEP);
+    all
+}
+
+/// Undated entries (Option::None) sort after every dated one.
+fn newest_first(headlines: &mut [Headline]) {
+    headlines.sort_by_key(|h| std::cmp::Reverse(h.published));
 }
 
 /// One feed's headlines, tagged with the feed's own title.
@@ -120,6 +146,64 @@ mod tests {
             headlines[0].title,
             "A field guide to abandoned server farms"
         );
+    }
+
+    fn headlines(source: &str, hours_ago: &[i64]) -> Vec<Headline> {
+        let now = chrono::Utc::now();
+        hours_ago
+            .iter()
+            .map(|h| Headline {
+                title: format!("{source} {h}h"),
+                source: source.into(),
+                link: None,
+                published: Some(now - chrono::Duration::hours(*h)),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn caps_and_names_apply_per_feed_before_the_merge() {
+        // The busy feed has the eight newest headlines; uncapped, it would fill the panel.
+        let busy = RssFeed {
+            max: Some(3),
+            name: Some("BUSY".into()),
+            ..RssFeed::new("https://busy.example/feed")
+        };
+        let quiet = RssFeed::new("https://quiet.example/feed");
+        let merged = merge([
+            (
+                &busy,
+                headlines("Busy Wire - All Stories", &[8, 1, 2, 3, 4, 5, 6, 7]),
+            ),
+            (&quiet, headlines("Quiet", &[20, 30])),
+        ]);
+        let titles: Vec<&str> = merged.iter().map(|h| h.title.as_str()).collect();
+        // The cap keeps a feed's newest, not its first-listed.
+        assert_eq!(
+            titles,
+            [
+                "Busy Wire - All Stories 1h",
+                "Busy Wire - All Stories 2h",
+                "Busy Wire - All Stories 3h",
+                "Quiet 20h",
+                "Quiet 30h"
+            ]
+        );
+        assert!(merged[..3].iter().all(|h| h.source == "BUSY"));
+        assert!(merged[3..].iter().all(|h| h.source == "Quiet"));
+    }
+
+    #[test]
+    fn uncapped_feeds_still_share_the_panel_limit() {
+        let a = RssFeed::new("https://a.example/feed");
+        let b = RssFeed::new("https://b.example/feed");
+        let merged = merge([
+            (&a, headlines("A", &[1, 3, 5, 7, 9, 11])),
+            (&b, headlines("B", &[2, 4, 6, 8, 10, 12])),
+        ]);
+        assert_eq!(merged.len(), KEEP);
+        assert_eq!(merged[0].title, "A 1h");
+        assert_eq!(merged[KEEP - 1].title, "B 8h");
     }
 
     #[test]

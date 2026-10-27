@@ -33,8 +33,15 @@ coins = ["bitcoin", "ethereum", "solana"]
 # on RSS alone).
 hn = true
 kev = true
-# RSS or Atom feed URLs, e.g. ["https://example.com/feed.xml"]. Format is
-# auto-detected. An empty list (the default) leaves the source off.
+# RSS or Atom feeds; format is auto-detected. An empty list (the default) leaves the
+# source off. Each entry is a bare URL, or a table with per-feed settings:
+#   name  shown instead of the feed's own title (the panel fits 12-15 characters)
+#   max   the most headlines this feed may show, so a busy feed can't crowd out the
+#         rest; the panel holds 8 across all feeds, newest first
+# rss = [
+#   "https://example.com/feed.xml",
+#   { url = "https://example.org/atom.xml", name = "EXAMPLE", max = 3 },
+# ]
 rss = []
 
 [fx]
