@@ -11,3 +11,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Its refs name Rust toolchains, not action releases: @1.88 is the MSRV the
+      # msrv job pins, which Dependabot would otherwise "bump" to a newer Rust.
+      - dependency-name: dtolnay/rust-toolchain
