@@ -8,7 +8,7 @@ use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-use super::text::{fit, row};
+use super::text::{fit, row, width_of};
 use crate::app::App;
 use crate::source::Link;
 use crate::{lexicon, theme};
@@ -116,11 +116,18 @@ pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(text) = dive_status(app, now) {
         items.push(Span::styled(text, Style::new().fg(theme::CYAN)));
     }
-    let left = pack(items, area.width as usize);
-    let keys = if app.dive.diving().is_some() {
+    // The short help hint always has room; the full key hints only when they fit too.
+    let width = area.width as usize;
+    let left = pack(items, width.saturating_sub(lexicon::KEYS_SHORT.width() + 2));
+    let full = if app.dive.diving().is_some() {
         lexicon::KEYS_DIVE
     } else {
         lexicon::KEYS_GRID
+    };
+    let keys = if width_of(&left) + full.width() + 1 < width {
+        full
+    } else {
+        lexicon::KEYS_SHORT
     };
     let keys = Span::styled(format!("{keys} "), Style::new().fg(theme::MUTED));
     frame.render_widget(

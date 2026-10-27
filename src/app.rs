@@ -54,6 +54,10 @@ pub struct App {
     pub should_quit: bool,
     /// Standing problems found at startup, shown in the ticker until fixed.
     pub warnings: Vec<String>,
+    /// Whether the `?` manual is open over everything else.
+    pub help: bool,
+    /// The rig's own files, `(what, where)`, for the manual to point at.
+    pub files: Vec<(&'static str, String)>,
     signals: Vec<Signal>,
     rebreach: broadcast::Sender<()>,
     last_rebreach: Option<Instant>,
@@ -93,6 +97,8 @@ impl App {
             intercept: None,
             should_quit: false,
             warnings: Vec::new(),
+            help: false,
+            files: Vec::new(),
             signals: Vec::new(),
             rebreach,
             last_rebreach: None,
@@ -120,7 +126,17 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent, now: Instant) {
+        let quit = key.code == KeyCode::Char('q')
+            || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL));
+        // With the manual open, any key but quit just closes it, so a stray press
+        // doesn't change something hidden behind it.
+        if self.help {
+            self.help = false;
+            self.should_quit = quit;
+            return;
+        }
         match key.code {
+            KeyCode::Char('?') => self.help = true,
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
@@ -416,6 +432,28 @@ mod tests {
             sent += 1;
         }
         assert_eq!(sent, 2);
+    }
+
+    #[test]
+    fn help_opens_and_any_key_but_quit_closes_it() {
+        let mut app = app(&[SourceId::Crypto]);
+        app.handle(done(SourceId::Crypto, Ok(crypto(1.0)), 0));
+        app.take_signals();
+
+        app.handle(key(KeyCode::Char('?')));
+        assert!(app.help);
+        // Swallowed: closes the manual instead of diving.
+        app.handle(key(KeyCode::Char('1')));
+        assert!(!app.help);
+        assert_eq!(app.dive.diving(), None);
+
+        app.handle(key(KeyCode::Char('?')));
+        app.handle(key(KeyCode::Esc));
+        assert!(!app.help && !app.should_quit);
+
+        app.handle(key(KeyCode::Char('?')));
+        app.handle(key(KeyCode::Char('q')));
+        assert!(app.should_quit);
     }
 
     #[test]
