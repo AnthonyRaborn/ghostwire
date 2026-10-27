@@ -19,7 +19,10 @@ pub mod usgs;
 use std::future::Future;
 use std::time::Duration;
 
-use tokio::sync::broadcast::{self, error::RecvError};
+use tokio::sync::broadcast::{
+    self,
+    error::{RecvError, TryRecvError},
+};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::cache::Cache;
@@ -177,6 +180,15 @@ pub fn spawn<F: Feed>(
                     FETCH_TIMEOUT.as_secs()
                 ))),
             };
+            // Presses that queued up while this fetch ran are answered by it.
+            loop {
+                match rebreach.try_recv() {
+                    Ok(()) | Err(TryRecvError::Lagged(_)) => {}
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Closed) => return,
+                }
+            }
+            let rate_limited = matches!(result, Err(FetchError::RateLimited(_)));
             let retry_in = match &result {
                 Ok(_) => {
                     failures = 0;
@@ -207,18 +219,36 @@ pub fn spawn<F: Feed>(
             if tx.send(Msg::Feed(done)).is_err() {
                 return;
             }
-            let woken = match retry_in {
-                Some(wait) => tokio::select! {
-                    _ = tokio::time::sleep(wait) => true,
-                    r = rebreach.recv() => !matches!(r, Err(RecvError::Closed)),
-                },
-                None => !matches!(rebreach.recv().await, Err(RecvError::Closed)),
-            };
-            if !woken {
+            if !wait(retry_in, rate_limited, &mut rebreach).await {
                 return;
             }
         }
     });
+}
+
+/// Sleeps until the next attempt is due or a re-breach comes in; `false` once the app
+/// is gone. A rate limit is waited out in full, since breaching through it would only
+/// earn another 429, or a longer ban.
+async fn wait(
+    retry_in: Option<Duration>,
+    rate_limited: bool,
+    rebreach: &mut broadcast::Receiver<()>,
+) -> bool {
+    let Some(wait) = retry_in else {
+        return !matches!(rebreach.recv().await, Err(RecvError::Closed));
+    };
+    let due = tokio::time::sleep(wait);
+    tokio::pin!(due);
+    loop {
+        tokio::select! {
+            _ = &mut due => return true,
+            r = rebreach.recv() => match r {
+                Err(RecvError::Closed) => return false,
+                _ if rate_limited => {}
+                _ => return true,
+            },
+        }
+    }
 }
 
 /// Exponential backoff with ±20% jitter, so sources that fail together don't retry
@@ -231,6 +261,9 @@ fn backoff(base: Duration, failures: u32) -> Duration {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
     use super::*;
 
     #[test]
@@ -241,6 +274,98 @@ mod tests {
         let third = backoff(base, 3);
         assert!(third >= Duration::from_secs(32) && third <= Duration::from_secs(48));
         assert!(backoff(base, 40) <= MAX_BACKOFF.mul_f64(1.2));
+    }
+
+    /// Counts its fetches; each takes `takes` and ends in whatever `outcome` builds.
+    struct Probe {
+        fetches: Arc<AtomicU32>,
+        takes: Duration,
+        outcome: fn() -> Result<Reading, FetchError>,
+    }
+
+    impl Feed for Probe {
+        fn source(&self) -> SourceId {
+            SourceId::Swpc
+        }
+
+        fn interval(&self) -> Duration {
+            Duration::from_secs(60)
+        }
+
+        async fn fetch(&self, _: &reqwest::Client) -> Result<Reading, FetchError> {
+            self.fetches.fetch_add(1, Ordering::SeqCst);
+            tokio::time::sleep(self.takes).await;
+            (self.outcome)()
+        }
+    }
+
+    struct Running {
+        fetches: Arc<AtomicU32>,
+        rx: tokio::sync::mpsc::UnboundedReceiver<Msg>,
+        rebreach: broadcast::Sender<()>,
+    }
+
+    impl Running {
+        fn start(takes: Duration, outcome: fn() -> Result<Reading, FetchError>) -> Self {
+            let fetches = Arc::new(AtomicU32::new(0));
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let (rebreach, _) = broadcast::channel(4);
+            let probe = Probe {
+                fetches: fetches.clone(),
+                takes,
+                outcome,
+            };
+            spawn(probe, reqwest::Client::new(), tx, rebreach.subscribe());
+            Self {
+                fetches,
+                rx,
+                rebreach,
+            }
+        }
+
+        fn fetches(&self) -> u32 {
+            self.fetches.load(Ordering::SeqCst)
+        }
+
+        async fn until_done(&mut self) {
+            while let Some(msg) = self.rx.recv().await {
+                if matches!(msg, Msg::Feed(FeedMsg::Done { .. })) {
+                    return;
+                }
+            }
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn rebreach_waits_out_a_rate_limit() {
+        let mut feed = Running::start(Duration::ZERO, || {
+            Err(FetchError::RateLimited(Some(Duration::from_secs(600))))
+        });
+        feed.until_done().await;
+        feed.rebreach.send(()).unwrap();
+        tokio::time::sleep(Duration::from_secs(599)).await;
+        assert_eq!(feed.fetches(), 1);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert_eq!(feed.fetches(), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn rebreaches_during_a_fetch_collapse_into_it() {
+        let mut feed = Running::start(Duration::from_secs(5), || {
+            Err(FetchError::Failed("reset".into()))
+        });
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        for _ in 0..3 {
+            feed.rebreach.send(()).unwrap();
+        }
+        feed.until_done().await;
+        // The first retry is 12-18s out, so nothing else should have started.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        assert_eq!(feed.fetches(), 1);
+        // A fresh press still cuts an ordinary backoff short.
+        feed.rebreach.send(()).unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(feed.fetches(), 2);
     }
 
     #[test]

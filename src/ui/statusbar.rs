@@ -92,7 +92,8 @@ pub fn draw_ticker(frame: &mut Frame, area: Rect, app: &App) {
         } else {
             state.retry_in(now)
         };
-        if let Some(text) = lexicon::trouble(id.handle(), &state.link, retry) {
+        let error = state.last_error.as_deref();
+        if let Some(text) = lexicon::trouble(id.handle(), &state.link, retry, error) {
             items.push(Span::styled(
                 text,
                 Style::new().fg(theme::link_color(&state.link)),

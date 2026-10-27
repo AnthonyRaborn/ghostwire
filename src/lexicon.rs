@@ -1,6 +1,10 @@
 //! Every in-fiction string lives here, so the rig's voice stays consistent.
 
 use crate::source::{Link, NodeId};
+use crate::ui::text::fit;
+
+/// The most an error takes up in the footer ticker, which every troubled source shares.
+const TICKER_ERROR_WIDTH: usize = 32;
 
 pub const RIG: &str = "GHOSTWIRE";
 /// This release's codename — hacker slang for "day one," which v1.0.0 is.
@@ -47,11 +51,33 @@ fn retry_suffix(verb: &str, secs: Option<u64>) -> String {
     secs.map(|s| format!(", {verb} {s}s")).unwrap_or_default()
 }
 
-/// A footer-ticker entry for a source in trouble; `None` when it's fine.
-pub fn trouble(handle: &str, link: &Link, retry_secs: Option<u64>) -> Option<String> {
+/// The most specific part of a fetch error: the last cause in the `: `-joined chain
+/// the feeds report, minus any OS error code. The log keeps the whole chain.
+pub fn error_brief(error: &str) -> &str {
+    let last = error.rsplit(": ").next().unwrap_or(error).trim();
+    match last.rfind(" (os error ") {
+        Some(i) if last.ends_with(')') => last[..i].trim_end(),
+        _ => last,
+    }
+}
+
+/// A footer-ticker entry for a source in trouble; `None` when it's fine. `error` is
+/// the last fetch failure, shown for ICE and FLATLINED.
+pub fn trouble(
+    handle: &str,
+    link: &Link,
+    retry_secs: Option<u64>,
+    error: Option<&str>,
+) -> Option<String> {
+    let reason = || {
+        error
+            .map(|e| format!(" — {}", fit(error_brief(e), TICKER_ERROR_WIDTH)))
+            .unwrap_or_default()
+    };
     match link {
         Link::Ice => Some(format!(
-            "{handle}: ICE{}",
+            "{handle}: ICE{}{}",
+            reason(),
             retry_suffix("retry", retry_secs)
         )),
         Link::Trace => Some(format!(
@@ -59,7 +85,8 @@ pub fn trouble(handle: &str, link: &Link, retry_secs: Option<u64>) -> Option<Str
             retry_suffix("dark", retry_secs)
         )),
         Link::Flatlined => Some(format!(
-            "{handle}: FLATLINED{}",
+            "{handle}: FLATLINED{}{}",
+            reason(),
             retry_suffix("retry", retry_secs)
         )),
         Link::Offline(reason) => Some(format!("{handle}: OFFLINE — {reason}")),
@@ -67,18 +94,30 @@ pub fn trouble(handle: &str, link: &Link, retry_secs: Option<u64>) -> Option<Str
     }
 }
 
-/// A node-body line for a source with nothing to show yet.
-pub fn awaiting(handle: &str, link: &Link, busy: bool, retry_secs: Option<u64>) -> String {
+/// A node-body line for a source with nothing to show yet. `error` is the last fetch
+/// failure, shown for ICE and FLATLINED.
+pub fn awaiting(
+    handle: &str,
+    link: &Link,
+    busy: bool,
+    retry_secs: Option<u64>,
+    error: Option<&str>,
+) -> String {
     if busy {
         return format!("{handle} » breaching");
     }
     let secs = retry_secs.unwrap_or(0);
+    let reason = || {
+        error
+            .map(|e| format!(" // {}", error_brief(e)))
+            .unwrap_or_default()
+    };
     match link {
         Link::Pending => format!("{handle} » handshake queued"),
         Link::Live | Link::Ghost => format!("{handle} » no signal"),
-        Link::Ice => format!("{handle} !! ICE // retry {secs}s"),
+        Link::Ice => format!("{handle} !! ICE // retry {secs}s{}", reason()),
         Link::Trace => format!("{handle} !! TRACE // dark {secs}s"),
-        Link::Flatlined => format!("{handle} ×× FLATLINED // retry {secs}s"),
+        Link::Flatlined => format!("{handle} ×× FLATLINED // retry {secs}s{}", reason()),
         Link::Offline(reason) => format!("{handle} OFFLINE // {reason}"),
     }
 }
@@ -174,4 +213,54 @@ pub fn uv(uv: f64) -> &'static str {
 
 pub fn too_small(min_w: u16, min_h: u16) -> String {
     format!("RIG DISPLAY TOO SMALL // need {min_w}×{min_h}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_brief_keeps_the_most_specific_cause() {
+        let cases = [
+            (
+                "error sending request: client error (Connect): tcp connect error: \
+                 Connection refused (os error 111)",
+                "Connection refused",
+            ),
+            (
+                "error sending request: client error (Connect): dns error: error resolving \
+                 DNS: failed to lookup address information: Name or service not known",
+                "Name or service not known",
+            ),
+            ("HTTP 503", "HTTP 503"),
+            ("no response in 20s", "no response in 20s"),
+            (
+                "unexpected payload: missing field `c` at line 1 column 2",
+                "missing field `c` at line 1 column 2",
+            ),
+        ];
+        for (error, brief) in cases {
+            assert_eq!(error_brief(error), brief);
+        }
+    }
+
+    #[test]
+    fn errors_show_only_for_failures() {
+        let error = Some("tcp connect error: Connection refused (os error 111)");
+        assert_eq!(
+            trouble("USGS", &Link::Ice, Some(30), error).unwrap(),
+            "USGS: ICE — Connection refused, retry 30s"
+        );
+        assert_eq!(
+            trouble("USGS", &Link::Trace, Some(30), error).unwrap(),
+            "USGS: TRACE ACTIVE, dark 30s"
+        );
+        assert_eq!(
+            awaiting("USGS", &Link::Flatlined, false, Some(30), error),
+            "USGS ×× FLATLINED // retry 30s // Connection refused"
+        );
+        let long = "x".repeat(80);
+        let entry = trouble("USGS", &Link::Ice, None, Some(&long)).unwrap();
+        assert_eq!(entry.chars().count(), "USGS: ICE — ".chars().count() + 32);
+    }
 }

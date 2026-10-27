@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Re-breach (`r`) no longer cuts a rate limit short, presses that land while a fetch is
+  running are answered by that fetch, and presses within 10 seconds of the last one are
+  ignored, so mashing `r` can't burn through OpenSky's or Finnhub's quota.
+
+### Changed
+
+- Sources in ICE or FLATLINED show why their last fetch failed, in the footer ticker
+  and in the node, instead of only in the log.
+
 ## [1.0.0] — ZERO-DAY
 
 First release.

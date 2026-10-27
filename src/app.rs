@@ -19,6 +19,8 @@ use crate::source::{FLATLINE_AFTER, Link, NodeId, SourceId, SourceState, best_li
 const BUSY_FRAME: Duration = Duration::from_millis(100);
 /// How long a priority intercept stays in the ticker.
 const INTERCEPT_SHOWN: Duration = Duration::from_secs(30);
+/// Presses closer together than this re-breach once, so mashing `r` can't burn quota.
+const REBREACH_COOLDOWN: Duration = Duration::from_secs(10);
 
 /// Things the effects layer reacts to, drained once per frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +56,7 @@ pub struct App {
     pub warnings: Vec<String>,
     signals: Vec<Signal>,
     rebreach: broadcast::Sender<()>,
+    last_rebreach: Option<Instant>,
     /// `None` in construct mode, so simulated data never lands on disk.
     cache: Option<Cache>,
 }
@@ -92,6 +95,7 @@ impl App {
             warnings: Vec::new(),
             signals: Vec::new(),
             rebreach,
+            last_rebreach: None,
             cache,
         }
     }
@@ -130,6 +134,13 @@ impl App {
                 None => self.should_quit = true,
             },
             KeyCode::Char('r') => {
+                if self
+                    .last_rebreach
+                    .is_some_and(|at| now.saturating_duration_since(at) < REBREACH_COOLDOWN)
+                {
+                    return;
+                }
+                self.last_rebreach = Some(now);
                 // No receivers only means no sources are running; nothing to wake.
                 let _ = self.rebreach.send(());
             }
@@ -389,6 +400,22 @@ mod tests {
         assert!(app.take_signals().is_empty());
         app.handle(done(SourceId::Swpc, fail(), 3));
         assert_eq!(app.sources[&SourceId::Swpc].link, Link::Flatlined);
+    }
+
+    #[test]
+    fn rebreach_presses_inside_the_cooldown_are_dropped() {
+        let (tx, mut rx) = broadcast::channel(8);
+        let mut app = App::new(Config::default(), true, true, Vec::new(), tx, None);
+        let r = KeyEvent::from(KeyCode::Char('r'));
+        let start = Instant::now();
+        app.handle_key(r, start);
+        app.handle_key(r, start + Duration::from_secs(3));
+        app.handle_key(r, start + REBREACH_COOLDOWN);
+        let mut sent = 0;
+        while rx.try_recv().is_ok() {
+            sent += 1;
+        }
+        assert_eq!(sent, 2);
     }
 
     #[test]

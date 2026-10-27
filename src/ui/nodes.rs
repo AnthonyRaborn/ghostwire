@@ -134,6 +134,7 @@ pub(super) fn awaiting(app: &App, id: SourceId) -> Line<'static> {
         &state.link,
         state.in_flight,
         state.retry_in(Instant::now()),
+        state.last_error.as_deref(),
     );
     if state.in_flight {
         text.push(' ');
