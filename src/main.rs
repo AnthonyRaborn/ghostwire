@@ -14,6 +14,7 @@ mod lexicon;
 mod paths;
 mod reading;
 mod source;
+mod sun;
 mod theme;
 mod ui;
 
