@@ -1,5 +1,6 @@
 mod app;
 mod cache;
+mod check;
 mod colordepth;
 mod config;
 mod cpu;
@@ -60,6 +61,10 @@ struct Cli {
     /// Write a commented example config to the config path, then exit.
     #[arg(long)]
     init_config: bool,
+
+    /// Check the config and keys, print what would run and why, then exit.
+    #[arg(long, conflicts_with = "init_config")]
+    check_config: bool,
 }
 
 #[tokio::main]
@@ -71,6 +76,9 @@ async fn main() -> Result<()> {
     };
     if cli.init_config {
         return init_config(&config_path);
+    }
+    if cli.check_config {
+        return check_config(&config_path);
     }
 
     let log_path = init_logging()?;
@@ -243,6 +251,24 @@ fn open_cache(config: &Config) -> Option<cache::Cache> {
     cache::Cache::open(&dir, config)
         .inspect_err(|e| tracing::warn!("no reading cache: {e:#}"))
         .ok()
+}
+
+/// Prints what the rig would run with this config and keys. A config or keys file that
+/// doesn't parse is an error, like it would be at startup.
+fn check_config(config_path: &Path) -> Result<()> {
+    let (config, config_found) = Config::load(config_path)?;
+    let keys_path = keys::path_beside(config_path);
+    let (keys, keys_exposed) = Keys::load(&keys_path)?;
+    let (config_shown, keys_shown) = (tilde(config_path), tilde(&keys_path));
+    let files = check::Files {
+        config: &config_shown,
+        config_found,
+        keys: &keys_shown,
+        keys_found: keys_path.exists(),
+        keys_exposed,
+    };
+    print!("{}", check::report(&config, &keys, &files));
+    Ok(())
 }
 
 /// Writes whichever of config.toml and keys.toml don't exist yet; never overwrites.

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `ghostwire --check-config` checks the config and keys and prints what each source
+  would do (run, run limited, off, or offline and why), plus anything the rig would
+  quietly drop, like a malformed stock symbol, without starting the display or
+  touching the network.
 - A `?` manual over the screen: the controls, what each link state and signal means,
   and where the config, keys, and log live. The ticker always keeps room for a short
   `[?] help` hint.

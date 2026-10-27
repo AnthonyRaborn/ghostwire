@@ -40,6 +40,12 @@ impl Feed for Ioda {
         Duration::from_secs(10 * 60)
     }
 
+    fn offline(&self) -> Option<String> {
+        self.country
+            .is_none()
+            .then(|| "set [sector] country".into())
+    }
+
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
         let Some(country) = &self.country else {
             return Err(FetchError::NotConfigured("set [sector] country".into()));

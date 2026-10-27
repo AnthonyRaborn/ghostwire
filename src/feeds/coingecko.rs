@@ -12,6 +12,8 @@ use crate::keys::Secret;
 use crate::reading::{Quote, Reading};
 use crate::source::SourceId;
 
+const NO_IDS: &str = "no valid [zaibatsu] coins";
+
 pub struct CoinGecko {
     ids: Vec<String>,
     key: Option<Secret>,
@@ -19,24 +21,22 @@ pub struct CoinGecko {
 
 impl CoinGecko {
     pub fn new(config: &Config, key: Option<Secret>) -> Self {
-        let ids = config
-            .zaibatsu
-            .coins
-            .iter()
-            .map(|id| id.trim().to_lowercase())
-            .filter(|id| {
-                let ok =
-                    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
-                if !ok {
-                    tracing::warn!(
-                        "ignoring coin id {id:?}: expected a CoinGecko id like \"bitcoin\""
-                    );
-                }
-                ok
-            })
-            .collect();
+        let (ids, rejected) = coin_ids(config);
+        for id in rejected {
+            tracing::warn!("ignoring coin id {id:?}: expected a CoinGecko id like \"bitcoin\"");
+        }
         Self { ids, key }
     }
+}
+
+/// `[zaibatsu] coins` as CoinGecko ids: `(usable, rejected)`.
+pub fn coin_ids(config: &Config) -> (Vec<String>, Vec<String>) {
+    config
+        .zaibatsu
+        .coins
+        .iter()
+        .map(|id| id.trim().to_lowercase())
+        .partition(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
 }
 
 impl Feed for CoinGecko {
@@ -48,11 +48,13 @@ impl Feed for CoinGecko {
         Duration::from_secs(2 * 60)
     }
 
+    fn offline(&self) -> Option<String> {
+        self.ids.is_empty().then(|| NO_IDS.into())
+    }
+
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
-        if self.ids.is_empty() {
-            return Err(FetchError::NotConfigured(
-                "no valid [zaibatsu] coins".into(),
-            ));
+        if let Some(reason) = self.offline() {
+            return Err(FetchError::NotConfigured(reason));
         }
         let url = format!(
             "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={}\

@@ -63,6 +63,13 @@ ghostwire
 Everything else is keyless. Stock quotes need a free [Finnhub](https://finnhub.io) key
 in `keys.toml`, next to the config file; every other feed works with no key at all.
 
+To see what the rig would run with your config, and why anything won't, without
+starting the display:
+
+```bash
+ghostwire --check-config
+```
+
 ## Controls
 
 | Key | Grid | Dive |

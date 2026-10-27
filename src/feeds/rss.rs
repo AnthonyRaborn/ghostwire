@@ -211,7 +211,7 @@ mod tests {
         assert!(parse_feed("not xml").is_err());
     }
 
-    /// `enabled()` in feeds/mod.rs keeps this from ever launching with an empty list;
+    /// `disabled()` in feeds/mod.rs keeps this from ever launching with an empty list;
     /// this just checks `fetch` itself doesn't panic or hang on it.
     #[tokio::test]
     async fn fails_cleanly_with_no_feeds_configured() {
