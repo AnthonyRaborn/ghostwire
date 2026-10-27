@@ -192,7 +192,14 @@ mod tests {
     #[test]
     fn troubled_sources_show_in_node_and_ticker() {
         let app = app_with(vec![
-            (SourceId::Weather, Err(FetchError::Failed("reset".into()))),
+            (
+                SourceId::Weather,
+                Err(FetchError::Failed(
+                    "error sending request: client error (Connect): tcp connect error: \
+                     Connection refused (os error 111)"
+                        .into(),
+                )),
+            ),
             (
                 SourceId::Stocks,
                 Err(FetchError::NotConfigured("FINNHUB_API_KEY not set".into())),
@@ -201,7 +208,9 @@ mod tests {
         ]);
         let screen = render(&app, 132, 30);
         println!("{screen}");
-        assert!(screen.contains("OPEN-METEO !! ICE // retry 30s"));
+        // The node line carries the reason too, clipped to the cell.
+        assert!(screen.contains("OPEN-METEO !! ICE // retry 30s // Conn"));
+        assert!(screen.contains("OPEN-METEO: ICE — Connection refused, retry 30s"));
         assert!(screen.contains("FINNHUB: OFFLINE — FINNHUB_API_KEY not set"));
         assert!(screen.contains("NOAA-SWPC: TRACE ACTIVE, dark 30s"));
         assert!(screen.contains("NO UPLINK"));
