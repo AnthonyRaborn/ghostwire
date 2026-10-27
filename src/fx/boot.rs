@@ -186,7 +186,7 @@ mod tests {
             t0,
         );
         let early = screen(&boot, t0 + Duration::from_millis(300));
-        assert!(early.contains("GHOSTWIRE // ZERO-DAY // RIG-07"));
+        assert!(early.contains("GHOSTWIRE // DAYBREAK // RIG-07"));
         assert!(!early.contains("keys"));
 
         let late = screen(&boot, t0 + per_line * 4);

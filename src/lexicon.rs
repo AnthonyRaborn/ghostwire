@@ -8,8 +8,9 @@ use crate::ui::text::fit;
 const TICKER_ERROR_WIDTH: usize = 32;
 
 pub const RIG: &str = "GHOSTWIRE";
-/// This release's codename — hacker slang for "day one," which v1.0.0 is.
-pub const CODENAME: &str = "ZERO-DAY";
+/// This release's codename. v1.1.0's is for the sunrise the terminator map now counts
+/// down to (v1.0.0 was ZERO-DAY, hacker slang for "day one").
+pub const CODENAME: &str = "DAYBREAK";
 pub const CONSTRUCT: &str = "CONSTRUCT // SIMULATED FEEDS";
 pub const KEYS_GRID: &str =
     "[1-6] dive  [space] next  [p] hold  [r] re-breach  [?] help  [q] jack out";

@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] — DAYBREAK
+
 ### Added
 
 - `ghostwire --check-config` checks the config and keys and prints what each source
@@ -28,6 +30,8 @@ All notable changes to this project are documented here. The format follows
 - CI runs the real binary end to end (`tools/smoke.sh`: `--demo` in a tmux pane driven
   by keys, plus `--check-config`), and a new weekly Audit workflow checks
   `Cargo.lock` against the RustSec advisory database.
+- Updated feed-rs to 3.0, along with libc, serde_json, and the toml crates; CI moves
+  to actions/checkout v7.
 - The terminator map draws in half-block cells for twice the vertical resolution, with
   real coastlines (from Natural Earth) instead of rough boxes, graded twilight bands
   instead of a hard day/night edge, and the point under the sun marked. The sun's
@@ -87,5 +91,6 @@ First release.
 - 24-bit color with an automatic 256-color fallback.
 - Configurable rig name (`[rig] shortname` / `number`).
 
-[Unreleased]: https://github.com/AnthonyRaborn/ghostwire/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/AnthonyRaborn/ghostwire/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/AnthonyRaborn/ghostwire/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AnthonyRaborn/ghostwire/releases/tag/v1.0.0
