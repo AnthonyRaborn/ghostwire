@@ -140,7 +140,65 @@ pub struct Intercepts {
     /// The built-in sources, on by default — set to `false` to run on RSS alone.
     pub hn: bool,
     pub kev: bool,
-    pub rss: Vec<String>,
+    pub rss: Vec<RssFeed>,
+}
+
+/// One `[intercepts] rss` entry: a bare URL, or a table with per-feed settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RssFeed {
+    pub url: String,
+    /// Shown instead of the feed's own title, which is often long.
+    pub name: Option<String>,
+    /// The most headlines this feed may put in the panel; unset means no cap of its own.
+    pub max: Option<usize>,
+}
+
+impl RssFeed {
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            name: None,
+            max: None,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RssTable {
+    url: String,
+    name: Option<String>,
+    max: Option<usize>,
+}
+
+impl<'de> Deserialize<'de> for RssFeed {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Entry;
+
+        impl<'de> serde::de::Visitor<'de> for Entry {
+            type Value = RssFeed;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a feed URL, or a table like { url = \"...\", name = \"...\" }")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, url: &str) -> Result<RssFeed, E> {
+                Ok(RssFeed::new(url))
+            }
+
+            // A table goes through `RssTable`, so a typo'd key gets a proper error.
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<RssFeed, A::Error> {
+                let t = RssTable::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(RssFeed {
+                    url: t.url,
+                    name: t.name,
+                    max: t.max,
+                })
+            }
+        }
+
+        d.deserialize_any(Entry)
+    }
 }
 
 impl Default for Intercepts {
@@ -234,6 +292,20 @@ impl Config {
                 "[sector] country {country:?} must be a two-letter uppercase ISO code, e.g. \"US\""
             );
         }
+        for feed in &self.intercepts.rss {
+            if !(feed.url.starts_with("https://") || feed.url.starts_with("http://")) {
+                bail!("[intercepts] rss {:?} isn't an http(s) URL", feed.url);
+            }
+            if feed.name.as_ref().is_some_and(|n| n.trim().is_empty()) {
+                bail!("[intercepts] rss {:?} has a blank name", feed.url);
+            }
+            if feed.max == Some(0) {
+                bail!(
+                    "[intercepts] rss {:?} has max = 0; drop the feed instead",
+                    feed.url
+                );
+            }
+        }
         if self.fx.dive_hold >= self.fx.dive_every {
             bail!("[fx] dive_hold must be shorter than dive_every");
         }
@@ -276,6 +348,19 @@ mod tests {
     }
 
     #[test]
+    fn example_rss_entries_parse() {
+        let block: String = EXAMPLE
+            .lines()
+            .skip_while(|l| !l.starts_with("# rss = ["))
+            .take_while(|l| !l.is_empty() && !l.starts_with("rss = "))
+            .map(|l| format!("{}\n", l.trim_start_matches("# ")))
+            .collect();
+        let config = Config::parse(&format!("[intercepts]\n{block}")).unwrap();
+        assert_eq!(config.intercepts.rss.len(), 2);
+        assert_eq!(config.intercepts.rss[1].name.as_deref(), Some("EXAMPLE"));
+    }
+
+    #[test]
     fn empty_config_is_all_defaults() {
         let config = Config::parse("").unwrap();
         assert_eq!(config.sector.radius_km, 300.0);
@@ -306,6 +391,49 @@ mod tests {
         let config = Config::parse("[intercepts]\nhn = false\nkev = false").unwrap();
         assert!(!config.intercepts.hn);
         assert!(!config.intercepts.kev);
+    }
+
+    #[test]
+    fn rss_entries_are_urls_or_tables() {
+        let config = Config::parse(
+            "[intercepts]\nrss = [\n  \"https://a.example/feed\",\n  \
+             { url = \"https://b.example/atom\", name = \"B\", max = 3 },\n]",
+        )
+        .unwrap();
+        assert_eq!(
+            config.intercepts.rss,
+            [
+                RssFeed::new("https://a.example/feed"),
+                RssFeed {
+                    url: "https://b.example/atom".into(),
+                    name: Some("B".into()),
+                    max: Some(3),
+                },
+            ]
+        );
+
+        let tables = Config::parse(
+            "[[intercepts.rss]]\nurl = \"https://a.example/feed\"\nmax = 2\n\n\
+             [[intercepts.rss]]\nurl = \"https://b.example/atom\"",
+        )
+        .unwrap();
+        assert_eq!(tables.intercepts.rss.len(), 2);
+        assert_eq!(tables.intercepts.rss[0].max, Some(2));
+    }
+
+    #[test]
+    fn rejects_bad_rss_entries() {
+        for bad in [
+            "rss = [\"example.com/feed\"]",
+            "rss = [{ url = \"https://a.example\", nmae = \"typo\" }]",
+            "rss = [{ url = \"https://a.example\", name = \" \" }]",
+            "rss = [{ url = \"https://a.example\", max = 0 }]",
+            "rss = [{ name = \"no url\" }]",
+            "rss = [3]",
+        ] {
+            let text = format!("[intercepts]\n{bad}");
+            assert!(Config::parse(&text).is_err(), "{bad}");
+        }
     }
 
     #[test]

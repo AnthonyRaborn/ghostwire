@@ -265,6 +265,7 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use super::*;
+    use crate::config::RssFeed;
 
     #[test]
     fn backoff_doubles_and_caps() {
@@ -377,7 +378,7 @@ mod tests {
 
         config.intercepts.hn = false;
         config.intercepts.kev = false;
-        config.intercepts.rss = vec!["https://example.com/feed.xml".into()];
+        config.intercepts.rss = vec![RssFeed::new("https://example.com/feed.xml")];
         assert!(!enabled(&config, SourceId::Hn));
         assert!(!enabled(&config, SourceId::Kev));
         assert!(enabled(&config, SourceId::Rss));

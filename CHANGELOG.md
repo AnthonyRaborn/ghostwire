@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- RSS/Atom feeds take per-feed settings: an entry in `[intercepts] rss` can be a table
+  with `url`, `name` (shown instead of the feed's own title), and `max` (the most
+  headlines that feed may show, so a busy feed can't crowd out the rest). Bare URLs
+  still work as before.
+
 ### Fixed
 
 - Re-breach (`r`) no longer cuts a rate limit short, presses that land while a fetch is
