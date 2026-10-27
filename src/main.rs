@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
         .build()?;
     let (tx, mut rx) = mpsc::unbounded_channel();
     let (rebreach, _) = broadcast::channel(4);
-    let cache = if cli.demo { None } else { open_cache() };
+    let cache = if cli.demo { None } else { open_cache(&config) };
     let started = feeds::spawn_all(
         &config,
         &keys,
@@ -228,9 +228,9 @@ fn boot_log(app: &App, config_path: &Path, keys: &Keys, keys_exposed: bool) -> V
 }
 
 /// Running without a cache only costs the instant ghost display on the next start.
-fn open_cache() -> Option<cache::Cache> {
+fn open_cache(config: &Config) -> Option<cache::Cache> {
     let dir = paths::cache_dir().ok()?.join("readings");
-    cache::Cache::open(&dir)
+    cache::Cache::open(&dir, config)
         .inspect_err(|e| tracing::warn!("no reading cache: {e:#}"))
         .ok()
 }
