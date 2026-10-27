@@ -165,6 +165,16 @@ pub fn kp(kp: f64) -> &'static str {
     }
 }
 
+/// Stands in for the handles of several sources sharing one ticker entry.
+pub fn links(count: usize) -> String {
+    format!("{count} LINKS")
+}
+
+/// Ticker entries that didn't fit.
+pub fn more(count: usize) -> String {
+    format!("+{count} more")
+}
+
 pub fn ghosts(count: usize) -> String {
     match count {
         1 => "1 ghost cached".into(),
