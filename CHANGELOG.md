@@ -25,6 +25,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- CI runs the real binary end to end (`tools/smoke.sh`: `--demo` in a tmux pane driven
+  by keys, plus `--check-config`), and a new weekly Audit workflow checks
+  `Cargo.lock` against the RustSec advisory database.
 - The terminator map draws in half-block cells for twice the vertical resolution, with
   real coastlines (from Natural Earth) instead of rough boxes, graded twilight bands
   instead of a hard day/night edge, and the point under the sun marked. The sun's
