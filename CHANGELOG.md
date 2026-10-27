@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format follows
 - Re-breach (`r`) no longer cuts a rate limit short, presses that land while a fetch is
   running are answered by that fetch, and presses within 10 seconds of the last one are
   ignored, so mashing `r` can't burn through OpenSky's or Finnhub's quota.
+- Ghosts are skipped when the config they were fetched under has changed (another
+  sector, radius, ticker list, or feed list) or when they're over 24 hours old, so a
+  restart no longer shows another sector's weather or aircraft as this one's.
+- Neural load reads the rig's real CPU use on Windows instead of a constant 0%.
 
 ### Changed
 

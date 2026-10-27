@@ -51,7 +51,53 @@ fn process_cpu_time() -> Duration {
     tv(usage.ru_utime) + tv(usage.ru_stime)
 }
 
-#[cfg(not(unix))]
+/// User + kernel CPU time for the whole process, across all threads.
+#[cfg(windows)]
+fn process_cpu_time() -> Duration {
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+
+    let zero = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let [mut created, mut exited, mut kernel, mut user] = [zero; 4];
+    // SAFETY: GetProcessTimes only writes into the four structs we hand it, and the
+    // current-process pseudo-handle needs no closing.
+    let ok = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    if ok == 0 {
+        return Duration::ZERO;
+    }
+    // FILETIME counts 100ns ticks.
+    let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+    Duration::from_nanos((ticks(kernel) + ticks(user)).saturating_mul(100))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn process_cpu_time() -> Duration {
     Duration::ZERO
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_the_process_own_work() {
+        let before = process_cpu_time();
+        let start = Instant::now();
+        let mut spins = 0u64;
+        while start.elapsed() < Duration::from_millis(200) {
+            spins = std::hint::black_box(spins.wrapping_add(1));
+        }
+        assert!(process_cpu_time() > before);
+    }
 }
