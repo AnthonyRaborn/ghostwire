@@ -1,6 +1,7 @@
 mod bigtext;
 mod dive;
 mod globe;
+mod help;
 mod nodes;
 mod radar;
 mod statusbar;
@@ -67,6 +68,9 @@ pub fn draw(frame: &mut Frame, app: &App, fx: &mut Fx) {
         }
     }
     statusbar::draw_ticker(frame, bottom, app);
+    if app.help {
+        help::draw(frame, grid, app);
+    }
     fx.screen(frame.buffer_mut(), area);
 }
 
@@ -206,7 +210,14 @@ mod tests {
             ),
             (SourceId::Swpc, Err(FetchError::RateLimited(None))),
         ]);
-        let screen = render(&app, 132, 30);
+        // At 132 columns the third entry gives way to the help hint's reserved room.
+        let narrow = render(&app, 132, 30);
+        let ticker = narrow.lines().last().unwrap();
+        assert!(
+            ticker.contains("+1 more") && ticker.ends_with("[?] help "),
+            "{ticker}"
+        );
+        let screen = render(&app, 150, 30);
         println!("{screen}");
         // The node line carries the reason too, clipped to the cell.
         assert!(screen.contains("OPEN-METEO !! ICE // retry 30s // Conn"));
@@ -362,6 +373,28 @@ mod tests {
     }
 
     #[test]
+    fn help_draws_over_the_grid_at_any_size() {
+        let mut app = demo_app();
+        app.help = true;
+        app.files = vec![("log", "~/.cache/ghostwire/ghostwire.log".into())];
+        for (w, h) in [(132, 30), (80, 36), (MIN_W, MIN_H)] {
+            let screen = render(&app, w, h);
+            println!("{screen}\n");
+            assert!(screen.contains("RIG MANUAL"), "{w}x{h}");
+            assert!(screen.contains("CONTROLS"), "{w}x{h}");
+        }
+        let wide = render(&app, 132, 30);
+        // Side by side: both columns share rows.
+        assert!(
+            wide.lines()
+                .any(|l| l.contains("CONTROLS") && l.contains("LINK STATES"))
+        );
+        assert!(wide.contains("FLATLINED  3+ failures in a row"));
+        assert!(wide.contains("~/.cache/ghostwire/ghostwire.log"));
+        assert!(wide.contains("any key closes"));
+    }
+
+    #[test]
     fn tiny_terminal_says_so() {
         let screen = render(&demo_app(), 40, 10);
         assert!(screen.contains("TOO SMALL"));
@@ -371,7 +404,8 @@ mod tests {
     fn minimum_size_renders_the_grid_not_the_fallback() {
         let screen = render(&demo_app(), MIN_W, MIN_H);
         assert!(!screen.contains("TOO SMALL"), "{screen}");
-        assert!(screen.contains("ZAIBATSU"), "{screen}");
+        assert!(screen.contains("1·ZAIBAT"), "{screen}");
+        assert!(screen.contains("[?] help"), "{screen}");
     }
 
     #[test]

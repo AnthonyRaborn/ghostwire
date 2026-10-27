@@ -72,6 +72,7 @@ in `keys.toml`, next to the config file; every other feed works with no key at a
 | `p` | hold the dive cycle | hold / release |
 | `esc` | jack out | surface |
 | `r` | re-breach: every source fetches now (rate-limited ones wait it out) | same |
+| `?` | the rig manual: controls, link states, file locations | same |
 | `q` / `ctrl-c` | jack out | same |
 
 ## Nodes and data sources

@@ -108,6 +108,11 @@ async fn main() -> Result<()> {
     if keys_exposed {
         app.warnings.push(lexicon::KEYS_EXPOSED.into());
     }
+    app.files = vec![
+        ("config", tilde(&config_path)),
+        ("keys", tilde(&keys_path)),
+        ("log", tilde(&log_path)),
+    ];
     let boot = boot_log(&app, &config_path, &keys, keys_exposed);
     let depth = colordepth::Depth::detect();
     tracing::info!(?depth, "color depth");
@@ -165,18 +170,22 @@ fn handle(app: &mut App, fx: &mut Fx, msg: Msg) {
     }
 }
 
-/// The jack-in log: facts about this run, in the rig's voice.
-fn boot_log(app: &App, config_path: &Path, keys: &Keys, keys_exposed: bool) -> Vec<BootLine> {
+/// `path` with the home directory shortened to `~`.
+fn tilde(path: &Path) -> String {
     let home = directories::BaseDirs::new().map(|d| d.home_dir().to_path_buf());
-    let short = |path: &Path| match home.as_ref().and_then(|h| path.strip_prefix(h).ok()) {
+    match home.as_ref().and_then(|h| path.strip_prefix(h).ok()) {
         Some(rest) => format!("~/{}", rest.display()),
         None => path.display().to_string(),
-    };
+    }
+}
+
+/// The jack-in log: facts about this run, in the rig's voice.
+fn boot_log(app: &App, config_path: &Path, keys: &Keys, keys_exposed: bool) -> Vec<BootLine> {
     let sector = &app.config.sector;
     let mut lines = vec![BootLine::new(
         "config",
         if app.config_found {
-            short(config_path)
+            tilde(config_path)
         } else {
             "none found, running on defaults".into()
         },

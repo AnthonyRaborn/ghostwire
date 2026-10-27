@@ -11,8 +11,37 @@ pub const RIG: &str = "GHOSTWIRE";
 /// This release's codename — hacker slang for "day one," which v1.0.0 is.
 pub const CODENAME: &str = "ZERO-DAY";
 pub const CONSTRUCT: &str = "CONSTRUCT // SIMULATED FEEDS";
-pub const KEYS_GRID: &str = "[1-6] dive  [space] next  [p] hold  [r] re-breach  [q] jack out";
-pub const KEYS_DIVE: &str = "[esc] surface  [space] next  [p] hold  [q] jack out";
+pub const KEYS_GRID: &str =
+    "[1-6] dive  [space] next  [p] hold  [r] re-breach  [?] help  [q] jack out";
+pub const KEYS_DIVE: &str = "[esc] surface  [space] next  [p] hold  [?] help  [q] jack out";
+/// What the ticker keeps room for when the full key hints don't fit.
+pub const KEYS_SHORT: &str = "[?] help";
+
+pub const HELP_TITLE: &str = " ◢ RIG MANUAL ◣ ";
+pub const HELP_CLOSE: &str = "any key closes · [q] jacks out";
+/// `(key, on the grid, in a dive)`.
+pub const HELP_KEYS: &[(&str, &str, &str)] = &[
+    ("1-6", "dive into that node", "switch node"),
+    ("space", "dive into the next node", "surface"),
+    ("p", "hold the dive cycle", "hold / release"),
+    ("esc", "jack out", "surface"),
+    ("r", "re-breach: fetch everything now", "same"),
+    ("?", "this manual", "same"),
+    ("q", "jack out", "same"),
+];
+/// `(signal, what it means)`, one or more lines each.
+pub const HELP_SIGNALS: &[(&str, &[&str])] = &[
+    ("dimming", &["data aging past its refresh interval"]),
+    (
+        "PRIORITY INTERCEPT",
+        &[
+            "something notable landed: a 3% price move,",
+            "an M4+ quake in range, a Kp 5+ storm, a new",
+            "KEV entry, an ISS pass, a new outage alert.",
+            "The rig dives straight to it.",
+        ],
+    ),
+];
 pub const JACKING_IN: &str = "JACKING IN";
 pub const DIVE_HELD: &str = "» dive cycle held";
 pub const NO_FIX_RADAR: &str = "NO SECTOR FIX";
@@ -59,6 +88,19 @@ pub fn error_brief(error: &str) -> &str {
     match last.rfind(" (os error ") {
         Some(i) if last.ends_with(')') => last[..i].trim_end(),
         _ => last,
+    }
+}
+
+/// What a link state means, for the manual.
+pub fn link_meaning(link: &Link) -> &'static str {
+    match link {
+        Link::Live => "fresh from the last fetch",
+        Link::Ghost => "last session's data, until a fetch lands",
+        Link::Pending => "first fetch still on its way",
+        Link::Ice => "last fetch failed; retrying with backoff",
+        Link::Trace => "rate-limited upstream; dark until it lifts",
+        Link::Flatlined => "3+ failures in a row; still retrying, slower",
+        Link::Offline(_) => "needs a key or location in config first",
     }
 }
 
