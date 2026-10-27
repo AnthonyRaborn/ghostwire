@@ -22,6 +22,7 @@ use crate::reading::{Quote, Reading};
 use crate::source::SourceId;
 
 const SPARK_LEN: usize = 48;
+const NO_SYMBOLS: &str = "no valid [zaibatsu] stocks";
 const OPEN_POLL: Duration = Duration::from_secs(60);
 const CLOSED_POLL: Duration = Duration::from_secs(15 * 60);
 
@@ -51,27 +52,30 @@ impl Finnhub {
                 history.insert(q.symbol.clone(), seeded);
             }
         }
-        let symbols = config
-            .zaibatsu
-            .stocks
-            .iter()
-            .map(|s| s.trim().to_uppercase())
-            .filter(|s| {
-                let ok = !s.is_empty()
-                    && s.chars()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
-                if !ok {
-                    tracing::warn!("ignoring stock symbol {s:?}");
-                }
-                ok
-            })
-            .collect();
+        let (symbols, rejected) = symbols(config);
+        for s in rejected {
+            tracing::warn!("ignoring stock symbol {s:?}");
+        }
         Self {
             symbols,
             key,
             history: Mutex::new(history),
         }
     }
+}
+
+/// `[zaibatsu] stocks` as Finnhub symbols: `(usable, rejected)`.
+pub fn symbols(config: &Config) -> (Vec<String>, Vec<String>) {
+    config
+        .zaibatsu
+        .stocks
+        .iter()
+        .map(|s| s.trim().to_uppercase())
+        .partition(|s| {
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+        })
 }
 
 impl Feed for Finnhub {
@@ -83,10 +87,23 @@ impl Feed for Finnhub {
         poll_interval(Utc::now())
     }
 
+    fn offline(&self) -> Option<String> {
+        if self.key.is_none() {
+            Some(lexicon::NO_FINNHUB_KEY.into())
+        } else if self.symbols.is_empty() {
+            Some(NO_SYMBOLS.into())
+        } else {
+            None
+        }
+    }
+
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
         let Some(key) = &self.key else {
             return Err(FetchError::NotConfigured(lexicon::NO_FINNHUB_KEY.into()));
         };
+        if self.symbols.is_empty() {
+            return Err(FetchError::NotConfigured(NO_SYMBOLS.into()));
+        }
         let requests = self.symbols.iter().map(|symbol| {
             let url = format!("https://finnhub.io/api/v1/quote?symbol={symbol}");
             get_text_keyed(http.get(url).header("X-Finnhub-Token", key.expose()))

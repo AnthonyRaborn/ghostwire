@@ -44,6 +44,12 @@ impl Feed for Usgs {
         Duration::from_secs(2 * 60)
     }
 
+    fn limited(&self) -> Option<String> {
+        self.fix
+            .is_none()
+            .then(|| "global quakes only: set [sector] lat/lon for nearby ones".into())
+    }
+
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
         let global = get_text(http.get(GLOBAL_URL));
         let Some((lat, lon)) = self.fix else {

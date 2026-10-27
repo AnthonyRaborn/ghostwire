@@ -60,6 +60,23 @@ pub trait Feed: Send + Sync + 'static {
         &self,
         http: &reqwest::Client,
     ) -> impl Future<Output = Result<Reading, FetchError>> + Send;
+
+    /// Why the config keeps this source from running at all (a missing key or
+    /// location), as `fetch` would report it without touching the network. Lets
+    /// `--check-config` say so up front.
+    fn offline(&self) -> Option<String> {
+        None
+    }
+
+    /// What it can't do as configured, when it still runs.
+    fn limited(&self) -> Option<String> {
+        None
+    }
+}
+
+/// Something done with every enabled source's feed, once it's built.
+pub trait Visit {
+    fn visit<F: Feed>(&mut self, feed: F);
 }
 
 #[derive(Debug)]
@@ -94,39 +111,52 @@ pub fn spawn_all(
         rebreach,
         started: Vec::new(),
     };
+    build_all(config, keys, demo, cache, &mut launcher);
+    launcher.started
+}
+
+/// Builds the feed for every source the config leaves on and hands each to `visitor`.
+/// The one place that decides which feed serves which source, for running the rig
+/// and for checking its config alike.
+pub fn build_all(
+    config: &Config,
+    keys: &Keys,
+    demo: bool,
+    cache: Option<&Cache>,
+    visitor: &mut impl Visit,
+) {
     for source in SourceId::ALL {
-        if !enabled(config, source) {
+        if disabled(config, source).is_some() {
             continue;
         }
         if demo {
-            launcher.launch(demo::DemoFeed::new(source, config));
+            visitor.visit(demo::DemoFeed::new(source, config));
             continue;
         }
         match source {
             SourceId::Stocks => {
                 let cached = cache.and_then(|c| c.load(SourceId::Stocks)).map(|(_, r)| r);
-                launcher.launch(finnhub::Finnhub::new(
+                visitor.visit(finnhub::Finnhub::new(
                     config,
                     keys.finnhub(),
                     cached.as_ref(),
                 ));
             }
             SourceId::Crypto => {
-                launcher.launch(coingecko::CoinGecko::new(config, keys.coingecko()));
+                visitor.visit(coingecko::CoinGecko::new(config, keys.coingecko()));
             }
-            SourceId::Weather => launcher.launch(open_meteo::OpenMeteo::new(config)),
-            SourceId::Hn => launcher.launch(hn::HackerNews),
-            SourceId::Kev => launcher.launch(kev::Kev),
-            SourceId::Quakes => launcher.launch(usgs::Usgs::new(config)),
-            SourceId::Swpc => launcher.launch(swpc::Swpc),
-            SourceId::OpenSky => launcher.launch(opensky::OpenSky::new(config)),
-            SourceId::Orbit => launcher.launch(orbit::Orbit::new(config)),
-            SourceId::Rss => launcher.launch(rss::Rss::new(config)),
-            SourceId::Ioda => launcher.launch(ioda::Ioda::new(config)),
-            SourceId::Uplink => launcher.launch(uplink::Uplink::new()),
+            SourceId::Weather => visitor.visit(open_meteo::OpenMeteo::new(config)),
+            SourceId::Hn => visitor.visit(hn::HackerNews),
+            SourceId::Kev => visitor.visit(kev::Kev),
+            SourceId::Quakes => visitor.visit(usgs::Usgs::new(config)),
+            SourceId::Swpc => visitor.visit(swpc::Swpc),
+            SourceId::OpenSky => visitor.visit(opensky::OpenSky::new(config)),
+            SourceId::Orbit => visitor.visit(orbit::Orbit::new(config)),
+            SourceId::Rss => visitor.visit(rss::Rss::new(config)),
+            SourceId::Ioda => visitor.visit(ioda::Ioda::new(config)),
+            SourceId::Uplink => visitor.visit(uplink::Uplink::new()),
         }
     }
-    launcher.started
 }
 
 struct Launcher<'a> {
@@ -136,8 +166,8 @@ struct Launcher<'a> {
     started: Vec<(SourceId, Duration)>,
 }
 
-impl Launcher<'_> {
-    fn launch<F: Feed>(&mut self, feed: F) {
+impl Visit for Launcher<'_> {
+    fn visit<F: Feed>(&mut self, feed: F) {
         self.started.push((feed.source(), feed.interval()));
         spawn(
             feed,
@@ -148,15 +178,20 @@ impl Launcher<'_> {
     }
 }
 
-/// Sources the config explicitly turns off by listing nothing for them.
-fn enabled(config: &Config, source: SourceId) -> bool {
+/// How the config turns a source off, if it does: by listing nothing for it, or by
+/// switching it off outright.
+pub fn disabled(config: &Config, source: SourceId) -> Option<&'static str> {
     match source {
-        SourceId::Stocks => !config.zaibatsu.stocks.is_empty(),
-        SourceId::Crypto => !config.zaibatsu.coins.is_empty(),
-        SourceId::Hn => config.intercepts.hn,
-        SourceId::Kev => config.intercepts.kev,
-        SourceId::Rss => !config.intercepts.rss.is_empty(),
-        _ => true,
+        SourceId::Stocks if config.zaibatsu.stocks.is_empty() => {
+            Some("no [zaibatsu] stocks listed")
+        }
+        SourceId::Crypto if config.zaibatsu.coins.is_empty() => Some("no [zaibatsu] coins listed"),
+        SourceId::Hn if !config.intercepts.hn => Some("[intercepts] hn = false"),
+        SourceId::Kev if !config.intercepts.kev => Some("[intercepts] kev = false"),
+        SourceId::Rss if config.intercepts.rss.is_empty() => {
+            Some("no [intercepts] rss feeds listed")
+        }
+        _ => None,
     }
 }
 
@@ -372,15 +407,15 @@ mod tests {
     #[test]
     fn intercepts_sources_can_be_individually_suppressed() {
         let mut config = Config::default();
-        assert!(enabled(&config, SourceId::Hn));
-        assert!(enabled(&config, SourceId::Kev));
-        assert!(!enabled(&config, SourceId::Rss));
+        assert!(disabled(&config, SourceId::Hn).is_none());
+        assert!(disabled(&config, SourceId::Kev).is_none());
+        assert!(disabled(&config, SourceId::Rss).is_some());
 
         config.intercepts.hn = false;
         config.intercepts.kev = false;
         config.intercepts.rss = vec![RssFeed::new("https://example.com/feed.xml")];
-        assert!(!enabled(&config, SourceId::Hn));
-        assert!(!enabled(&config, SourceId::Kev));
-        assert!(enabled(&config, SourceId::Rss));
+        assert!(disabled(&config, SourceId::Hn).is_some());
+        assert!(disabled(&config, SourceId::Kev).is_some());
+        assert!(disabled(&config, SourceId::Rss).is_none());
     }
 }

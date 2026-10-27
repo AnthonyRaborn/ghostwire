@@ -38,6 +38,10 @@ impl Feed for Orbit {
         Duration::from_secs(60)
     }
 
+    fn offline(&self) -> Option<String> {
+        self.fix.is_none().then(|| "set [sector] lat/lon".into())
+    }
+
     async fn fetch(&self, http: &reqwest::Client) -> Result<Reading, FetchError> {
         let Some(here) = self.fix else {
             return Err(FetchError::NotConfigured("set [sector] lat/lon".into()));
