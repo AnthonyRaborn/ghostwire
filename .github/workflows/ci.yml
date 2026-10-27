@@ -32,3 +32,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
+
+  # The real binary, end to end: --demo in a tmux pane, driven by keys, plus
+  # --check-config. See tools/smoke.sh.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: command -v tmux || (sudo apt-get update && sudo apt-get install -y tmux)
+      - run: cargo build --locked
+      - run: tools/smoke.sh target/debug/ghostwire

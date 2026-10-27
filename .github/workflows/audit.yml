@@ -1,0 +1,25 @@
+name: Audit
+
+# Security advisories against Cargo.lock. Kept out of CI so an advisory published
+# against an unchanged dependency flags the weekly run instead of failing every PR.
+on:
+  push:
+    branches: [main]
+    paths: [Cargo.toml, Cargo.lock, .github/workflows/audit.yml]
+  pull_request:
+    paths: [Cargo.toml, Cargo.lock, .github/workflows/audit.yml]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
