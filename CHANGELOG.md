@@ -37,6 +37,13 @@ All notable changes to this project are documented here. The format follows
   `9 LINKS: ICE — Connection refused, retry 5s`), and entries that don't fit drop off
   whole behind a `+N more` count instead of running off the edge mid-word.
 
+### Security
+
+- Updated rustls to 0.23.46, rustls-webpki to 0.103.16, and webpki-root-certs to
+  1.0.11 for RUSTSEC-2026-0346, -0347, -0348, -0349, -0382, and -0383 (TLS secrets in
+  `Debug` output, a key-exchange downgrade, distrusted intermediates, and more), and
+  tokio to 1.54.1 for RUSTSEC-2026-0386. Every feed's HTTPS goes through rustls.
+
 ### Fixed
 
 - Re-breach (`r`) no longer cuts a rate limit short, presses that land while a fetch is
