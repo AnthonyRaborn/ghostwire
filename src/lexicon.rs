@@ -1,6 +1,7 @@
 //! Every in-fiction string lives here, so the rig's voice stays consistent.
 
 use crate::source::{Link, NodeId};
+use crate::sun::{Event, Light};
 use crate::ui::text::fit;
 
 /// The most an error takes up in the footer ticker, which every troubled source shares.
@@ -119,6 +120,34 @@ pub fn awaiting(
         Link::Trace => format!("{handle} !! TRACE // dark {secs}s"),
         Link::Flatlined => format!("{handle} ×× FLATLINED // retry {secs}s{}", reason()),
         Link::Offline(reason) => format!("{handle} OFFLINE // {reason}"),
+    }
+}
+
+pub fn light(light: Light) -> &'static str {
+    match light {
+        Light::Day => "DAY",
+        Light::Civil => "CIVIL TWILIGHT",
+        Light::Nautical => "NAUTICAL TWILIGHT",
+        Light::Astronomical => "ASTRO TWILIGHT",
+        Light::Night => "NIGHT",
+    }
+}
+
+/// The sector's next sunrise or sunset, counted down from `now`.
+pub fn sun_event(event: Event, now: chrono::DateTime<chrono::Utc>) -> String {
+    let left = |at: chrono::DateTime<chrono::Utc>| {
+        let mins = (at - now).num_minutes().max(0);
+        match mins {
+            0 => "<1m".to_string(),
+            m if m < 60 => format!("{m}m"),
+            m => format!("{}h{:02}m", m / 60, m % 60),
+        }
+    };
+    match event {
+        Event::Rise(at) => format!("rises in {}", left(at)),
+        Event::Set(at) => format!("sets in {}", left(at)),
+        Event::StaysUp => "sun stays up".into(),
+        Event::StaysDown => "sun stays down".into(),
     }
 }
 
@@ -252,6 +281,25 @@ mod tests {
         for (error, brief) in cases {
             assert_eq!(error_brief(error), brief);
         }
+    }
+
+    #[test]
+    fn sun_events_count_down() {
+        use chrono::{Duration, Utc};
+        let now = Utc::now();
+        assert_eq!(
+            sun_event(Event::Set(now + Duration::minutes(192)), now),
+            "sets in 3h12m"
+        );
+        assert_eq!(
+            sun_event(Event::Rise(now + Duration::minutes(45)), now),
+            "rises in 45m"
+        );
+        assert_eq!(
+            sun_event(Event::Rise(now + Duration::seconds(20)), now),
+            "rises in <1m"
+        );
+        assert_eq!(sun_event(Event::StaysDown, now), "sun stays down");
     }
 
     #[test]

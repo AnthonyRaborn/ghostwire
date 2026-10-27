@@ -23,6 +23,7 @@ use crate::reading::{
     LinkHealth, OutageAlert, Quake, Quote, Reading, Satellite, Weather, xray_class,
 };
 use crate::source::{NodeId, SourceId};
+use crate::sun::{self, Light};
 use crate::{geo, lexicon, theme};
 
 /// Contacts and quakes that get a name tag on the scope.
@@ -1251,20 +1252,70 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     // quiet more often than not. No feed behind this one: it's the sun's position,
     // computed locally, same as the radar sweep.
     if globe_area.height >= 6 && globe_area.width >= 20 {
+        let readout = sun_readout(app, now);
         let [globe_header, globe_body] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(globe_area);
+        let drawn_at = globe::map_time(now);
         frame.render_widget(
-            Paragraph::new(header(format!("TERMINATOR // {:02}Z", now.hour()))),
+            Paragraph::new(header(format!(
+                "TERMINATOR // {:02}:{:02}Z",
+                drawn_at.hour(),
+                drawn_at.minute()
+            ))),
             globe_header,
         );
+        // Keep the map's 4:1 proportions, centered, with the readout right under it.
+        let room = globe_body
+            .height
+            .saturating_sub(u16::from(readout.is_some()));
+        let map_rows = room.min(globe_body.width / 4).max(1);
+        let map_cols = globe_body.width.min(map_rows * 4);
+        let [map_area, readout_area] =
+            Layout::vertical([Constraint::Length(map_rows), Constraint::Length(1)])
+                .areas(globe_body);
+        let [_, map_area, _] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(map_cols),
+            Constraint::Fill(1),
+        ])
+        .areas(map_area);
         let globe_lines = globe::render(
-            globe_body.width as usize,
-            globe_body.height as usize,
+            map_area.width as usize,
+            map_area.height as usize,
             now,
             app.config.sector.fix(),
         );
-        frame.render_widget(Paragraph::new(globe_lines), globe_body);
+        frame.render_widget(Paragraph::new(globe_lines), map_area);
+        if let Some(readout) = readout {
+            frame.render_widget(Paragraph::new(readout).centered(), readout_area);
+        }
     }
+}
+
+/// The sun as the sector sees it: how lit it is, how high the sun stands, and when it
+/// next rises or sets. Matches the map's five-minute steps, except the countdown.
+fn sun_readout(app: &App, now: DateTime<Utc>) -> Option<Line<'static>> {
+    let (lat, lon) = app.config.sector.fix()?;
+    let elevation = sun::elevation(lat, lon, globe::map_time(now));
+    let light = Light::of(elevation);
+    let color = match light {
+        Light::Day => theme::YELLOW,
+        Light::Civil => theme::ORANGE,
+        Light::Nautical => theme::BLUE,
+        Light::Astronomical => theme::GHOST,
+        Light::Night => theme::MUTED,
+    };
+    Some(Line::from(vec![
+        Span::styled("◆ ", Style::new().fg(theme::MAGENTA)),
+        value(format!("{} ", app.config.sector.name)),
+        label("· "),
+        Span::styled(lexicon::light(light), Style::new().fg(color)),
+        label(format!(
+            " · sun {:+}° · {}",
+            elevation.round() as i64,
+            lexicon::sun_event(sun::next_event(lat, lon, now), now)
+        )),
+    ]))
 }
 
 /// A rough 0-100 read on the country's link health: full when nothing's alerting,

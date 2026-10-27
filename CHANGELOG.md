@@ -12,6 +12,23 @@ All notable changes to this project are documented here. The format follows
   with `url`, `name` (shown instead of the feed's own title), and `max` (the most
   headlines that feed may show, so a busy feed can't crowd out the rest). Bare URLs
   still work as before.
+- A sun readout under the NETSTATUS terminator map: the sector's light (day, civil,
+  nautical, or astronomical twilight, or night), the sun's elevation, and a countdown
+  to the next sunrise or sunset.
+
+### Changed
+
+- The terminator map draws in half-block cells for twice the vertical resolution, with
+  real coastlines (from Natural Earth) instead of rough boxes, graded twilight bands
+  instead of a hard day/night edge, and the point under the sun marked. The sun's
+  position now allows for the equation of time (up to ~4° off before) and updates every
+  five minutes instead of every hour, and the sector marker covers one cell instead of
+  a 2×2 block.
+- Sources in ICE or FLATLINED show why their last fetch failed, in the footer ticker
+  and in the node, instead of only in the log.
+- Sources in the same trouble for the same reason share one ticker entry (e.g.
+  `9 LINKS: ICE — Connection refused, retry 5s`), and entries that don't fit drop off
+  whole behind a `+N more` count instead of running off the edge mid-word.
 
 ### Fixed
 
@@ -22,14 +39,6 @@ All notable changes to this project are documented here. The format follows
   sector, radius, ticker list, or feed list) or when they're over 24 hours old, so a
   restart no longer shows another sector's weather or aircraft as this one's.
 - Neural load reads the rig's real CPU use on Windows instead of a constant 0%.
-
-### Changed
-
-- Sources in ICE or FLATLINED show why their last fetch failed, in the footer ticker
-  and in the node, instead of only in the log.
-- Sources in the same trouble for the same reason share one ticker entry (e.g.
-  `9 LINKS: ICE — Connection refused, retry 5s`), and entries that don't fit drop off
-  whole behind a `+N more` count instead of running off the edge mid-word.
 
 ## [1.0.0] — ZERO-DAY
 
