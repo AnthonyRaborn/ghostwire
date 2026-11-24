@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Updated url to 2.5.9 for RUSTSEC-2026-0592: `Url::origin()` on a deeply nested
+  `blob:` URL overflowed the stack and aborted the process. Feed and API URLs go
+  through url via reqwest and feed-rs.
+
 ## [1.1.0] — DAYBREAK
 
 ### Added
