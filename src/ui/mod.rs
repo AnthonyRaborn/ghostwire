@@ -9,7 +9,7 @@ pub mod text;
 
 use std::time::Instant;
 
-use chrono::Utc;
+use jiff::Timestamp;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
@@ -57,7 +57,7 @@ pub fn draw(frame: &mut Frame, app: &App, fx: &mut Fx) {
         Constraint::Length(1),
     ])
     .areas(area);
-    let now = Utc::now();
+    let now = Timestamp::now();
     statusbar::draw_top(frame, top, app);
     match app.dive.diving() {
         Some(node) => dive::draw(frame, grid, app, node, now, instant, fx),
@@ -108,6 +108,7 @@ fn grid_cells(area: Rect) -> Vec<Rect> {
 mod tests {
     use std::time::Duration;
 
+    use jiff::tz::TimeZone;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use tokio::sync::broadcast;
@@ -480,7 +481,7 @@ mod tests {
                 vendor: "Acme".into(),
                 product: "Router".into(),
                 name: String::new(),
-                added: Utc::now().date_naive(),
+                added: Timestamp::now().to_zoned_datetime(TimeZone::UTC).date(),
                 ransomware: false,
             })
             .collect();
@@ -490,14 +491,14 @@ mod tests {
                 title: format!("Story {i}"),
                 score: 100,
                 comments: 10,
-                posted: Utc::now(),
+                posted: Timestamp::now(),
             })
             .collect();
         let headlines = vec![Headline {
             title: "Canary headline".into(),
             source: "Test Feed".into(),
             link: None,
-            published: Some(Utc::now()),
+            published: Some(Timestamp::now()),
         }];
         let app = app_with(vec![
             (SourceId::Kev, Ok(crate::reading::Reading::Kev(vulns))),

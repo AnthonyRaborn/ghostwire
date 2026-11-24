@@ -1,0 +1,9 @@
+# cargo-deny settings for .github/workflows/audit.yml (`cargo deny check advisories`).
+
+[advisories]
+ignore = [
+    # chrono is unmaintained, with no fixed release. ghostwire's own code uses jiff;
+    # chrono only comes in through feed-rs 3.0, whose entry dates are chrono types.
+    # Drop this once feed-rs moves off chrono.
+    { id = "RUSTSEC-2026-0543", reason = "transitive through feed-rs; ghostwire itself uses jiff" },
+]

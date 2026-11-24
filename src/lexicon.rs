@@ -177,9 +177,9 @@ pub fn light(light: Light) -> &'static str {
 }
 
 /// The sector's next sunrise or sunset, counted down from `now`.
-pub fn sun_event(event: Event, now: chrono::DateTime<chrono::Utc>) -> String {
-    let left = |at: chrono::DateTime<chrono::Utc>| {
-        let mins = (at - now).num_minutes().max(0);
+pub fn sun_event(event: Event, now: jiff::Timestamp) -> String {
+    let left = |at: jiff::Timestamp| {
+        let mins = (at - now).as_mins().max(0);
         match mins {
             0 => "<1m".to_string(),
             m if m < 60 => format!("{m}m"),
@@ -328,18 +328,18 @@ mod tests {
 
     #[test]
     fn sun_events_count_down() {
-        use chrono::{Duration, Utc};
-        let now = Utc::now();
+        use jiff::{SignedDuration, Timestamp};
+        let now = Timestamp::now();
         assert_eq!(
-            sun_event(Event::Set(now + Duration::minutes(192)), now),
+            sun_event(Event::Set(now + SignedDuration::from_mins(192)), now),
             "sets in 3h12m"
         );
         assert_eq!(
-            sun_event(Event::Rise(now + Duration::minutes(45)), now),
+            sun_event(Event::Rise(now + SignedDuration::from_mins(45)), now),
             "rises in 45m"
         );
         assert_eq!(
-            sun_event(Event::Rise(now + Duration::seconds(20)), now),
+            sun_event(Event::Rise(now + SignedDuration::from_secs(20)), now),
             "rises in <1m"
         );
         assert_eq!(sun_event(Event::StaysDown, now), "sun stays down");

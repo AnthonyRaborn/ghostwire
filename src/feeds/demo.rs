@@ -6,8 +6,8 @@ use std::f64::consts::TAU;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{Days, Utc};
 use fastrand::Rng;
+use jiff::{SignedDuration, Timestamp, ToSpan, ZonedDateTime, civil::Date};
 
 use super::{Feed, FetchError};
 use crate::config::{Config, Units};
@@ -368,10 +368,10 @@ fn weather(mut w: Weather, rng: &mut Rng) -> Weather {
 }
 
 fn hn(mut stories: Vec<Story>, rng: &mut Rng) -> Vec<Story> {
-    let now = Utc::now();
+    let now = Timestamp::now();
     if stories.is_empty() {
         for _ in 0..10 {
-            let posted = now - chrono::Duration::minutes(rng.i64(10..600));
+            let posted = now - SignedDuration::from_mins(rng.i64(10..600));
             let score = rng.u32(20..600);
             let story = new_story(&stories, rng, posted, score);
             stories.push(story);
@@ -392,12 +392,7 @@ fn hn(mut stories: Vec<Story>, rng: &mut Rng) -> Vec<Story> {
     stories
 }
 
-fn new_story(
-    existing: &[Story],
-    rng: &mut Rng,
-    posted: chrono::DateTime<Utc>,
-    score: u32,
-) -> Story {
+fn new_story(existing: &[Story], rng: &mut Rng, posted: Timestamp, score: u32) -> Story {
     let unused: Vec<&str> = HN_TITLES
         .iter()
         .copied()
@@ -418,10 +413,10 @@ fn new_story(
 }
 
 fn rss(mut headlines: Vec<Headline>, rng: &mut Rng) -> Vec<Headline> {
-    let now = Utc::now();
+    let now = Timestamp::now();
     if headlines.is_empty() {
         for _ in 0..rng.usize(4..8) {
-            let published = now - chrono::Duration::minutes(rng.i64(5..900));
+            let published = now - SignedDuration::from_mins(rng.i64(5..900));
             headlines.push(new_headline(rng, published));
         }
     }
@@ -434,7 +429,7 @@ fn rss(mut headlines: Vec<Headline>, rng: &mut Rng) -> Vec<Headline> {
     headlines
 }
 
-fn new_headline(rng: &mut Rng, published: chrono::DateTime<Utc>) -> Headline {
+fn new_headline(rng: &mut Rng, published: Timestamp) -> Headline {
     let (source, title) = pick(rng, RSS_HEADLINES);
     Headline {
         title: title.to_string(),
@@ -451,8 +446,8 @@ const COLOS: &[&str] = &["SJC", "MIA", "ORD", "DFW", "SEA", "IAD"];
 /// Alerts are rare, so this mostly stays quiet: a small chance of one landing, and
 /// stale ones (over 3h) age out just like the real window would drop them.
 fn ioda(mut outages: CountryOutages, rng: &mut Rng) -> CountryOutages {
-    let now = Utc::now();
-    outages.alerts.retain(|a| (now - a.time).num_hours() < 3);
+    let now = Timestamp::now();
+    outages.alerts.retain(|a| (now - a.time).as_hours() < 3);
     if rng.f64() < 0.04 {
         outages.alerts.insert(
             0,
@@ -479,13 +474,11 @@ fn uplink(mut link: LinkHealth, rng: &mut Rng) -> LinkHealth {
 }
 
 fn kev(mut vulns: Vec<Vuln>, rng: &mut Rng) -> Vec<Vuln> {
-    let today = chrono::Local::now().date_naive();
+    let today = ZonedDateTime::now().date();
     if vulns.is_empty() {
         vulns = (0..4)
             .map(|i| {
-                let added = today
-                    .checked_sub_days(Days::new(i * 2 + 1))
-                    .unwrap_or(today);
+                let added = today.checked_sub((i * 2 + 1).days()).unwrap_or(today);
                 new_vuln(rng, added)
             })
             .collect();
@@ -497,7 +490,7 @@ fn kev(mut vulns: Vec<Vuln>, rng: &mut Rng) -> Vec<Vuln> {
     vulns
 }
 
-fn new_vuln(rng: &mut Rng, added: chrono::NaiveDate) -> Vuln {
+fn new_vuln(rng: &mut Rng, added: Date) -> Vuln {
     let (vendor, product) = pick(rng, KEV_TARGETS);
     Vuln {
         cve: format!("CVE-2026-{}", rng.u32(10_000..60_000)),
@@ -510,11 +503,11 @@ fn new_vuln(rng: &mut Rng, added: chrono::NaiveDate) -> Vuln {
 }
 
 fn quakes(mut quakes: Vec<Quake>, radius_km: f64, rng: &mut Rng) -> Vec<Quake> {
-    let now = Utc::now();
+    let now = Timestamp::now();
     if quakes.is_empty() {
         quakes = (0..6)
             .map(|_| {
-                let time = now - chrono::Duration::minutes(rng.i64(5..720));
+                let time = now - SignedDuration::from_mins(rng.i64(5..720));
                 new_quake(rng, radius_km, time)
             })
             .collect();
@@ -527,7 +520,7 @@ fn quakes(mut quakes: Vec<Quake>, radius_km: f64, rng: &mut Rng) -> Vec<Quake> {
     quakes
 }
 
-fn new_quake(rng: &mut Rng, radius_km: f64, time: chrono::DateTime<Utc>) -> Quake {
+fn new_quake(rng: &mut Rng, radius_km: f64, time: Timestamp) -> Quake {
     let id = format!("demo{}", rng.u32(..));
     if rng.f64() < 0.7 {
         let distance = rng.f64() * radius_km;

@@ -8,7 +8,7 @@
 
 use std::sync::LazyLock;
 
-use chrono::{DateTime, Duration, DurationRound, Utc};
+use jiff::{RoundMode, Timestamp, TimestampRound, Unit};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -24,8 +24,6 @@ const MASK_ROWS: usize = 90;
 /// A pixel counts as land once at least this share of the mask under it is.
 const LAND_SHARE: f64 = 0.5;
 
-const STEP: Duration = Duration::minutes(5);
-
 const DAY_LAND: Color = Color::Rgb(0, 160, 100);
 const DAY_SEA: Color = Color::Rgb(0, 72, 110);
 const NIGHT_LAND: Color = Color::Rgb(30, 38, 62);
@@ -39,8 +37,12 @@ static MASK: LazyLock<Vec<bool>> = LazyLock::new(|| {
 });
 
 /// The moment the map is drawn for: `now`, floored to five minutes.
-pub fn map_time(now: DateTime<Utc>) -> DateTime<Utc> {
-    now.duration_trunc(STEP).unwrap_or(now)
+pub fn map_time(now: Timestamp) -> Timestamp {
+    let step = TimestampRound::new()
+        .smallest(Unit::Minute)
+        .increment(5)
+        .mode(RoundMode::Floor);
+    now.round(step).unwrap_or(now)
 }
 
 fn mask_at(row: usize, col: usize) -> bool {
@@ -132,7 +134,7 @@ fn pixel_of(lat: f64, lon: f64, cols: usize, pixel_rows: usize) -> (usize, usize
 pub fn render(
     cols: usize,
     rows: usize,
-    now: DateTime<Utc>,
+    now: Timestamp,
     sector: Option<(f64, f64)>,
 ) -> Vec<Line<'static>> {
     if cols == 0 || rows == 0 {
@@ -182,13 +184,17 @@ pub fn render(
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use jiff::{civil, tz::TimeZone};
     use unicode_width::UnicodeWidthStr;
 
     use super::*;
 
-    fn utc(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    fn utc(y: i16, mo: i8, d: i8, h: i8, mi: i8) -> Timestamp {
+        civil::date(y, mo, d)
+            .at(h, mi, 0, 0)
+            .to_zoned_datetime(TimeZone::UTC)
+            .unwrap()
+            .timestamp()
     }
 
     fn glyphs(lines: &[Line]) -> Vec<String> {
@@ -272,7 +278,7 @@ mod tests {
 
     #[test]
     fn empty_grid_is_empty() {
-        assert!(render(0, 4, Utc::now(), None).is_empty());
-        assert!(render(4, 0, Utc::now(), None).is_empty());
+        assert!(render(0, 4, Timestamp::now(), None).is_empty());
+        assert!(render(4, 0, Timestamp::now(), None).is_empty());
     }
 }

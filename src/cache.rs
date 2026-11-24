@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, TimeDelta, Utc};
+use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -13,7 +13,7 @@ use crate::reading::Reading;
 use crate::source::SourceId;
 
 /// Older ghosts are history, not a head start.
-const MAX_AGE: TimeDelta = TimeDelta::hours(24);
+const MAX_AGE: SignedDuration = SignedDuration::from_hours(24);
 
 pub struct Cache {
     dir: PathBuf,
@@ -22,14 +22,14 @@ pub struct Cache {
 
 #[derive(Serialize)]
 struct EntryRef<'a> {
-    fetched_at: DateTime<Utc>,
+    fetched_at: Timestamp,
     config: String,
     reading: &'a Reading,
 }
 
 #[derive(Deserialize)]
 struct Entry {
-    fetched_at: DateTime<Utc>,
+    fetched_at: Timestamp,
     /// Missing from entries written before it existed, which then only match sources
     /// that don't depend on config.
     #[serde(default)]
@@ -51,7 +51,7 @@ impl Cache {
     }
 
     /// A missing, unreadable, outdated, or too-old entry is just a cold start.
-    pub fn load(&self, source: SourceId) -> Option<(DateTime<Utc>, Reading)> {
+    pub fn load(&self, source: SourceId) -> Option<(Timestamp, Reading)> {
         let text = std::fs::read_to_string(self.path(source)).ok()?;
         let entry = match serde_json::from_str::<Entry>(&text) {
             Ok(entry) => entry,
@@ -64,7 +64,7 @@ impl Cache {
             tracing::info!(?source, "ignoring cache entry from a different config");
             return None;
         }
-        if Utc::now() - entry.fetched_at > MAX_AGE {
+        if Timestamp::now() - entry.fetched_at > MAX_AGE {
             tracing::info!(?source, "ignoring cache entry older than {MAX_AGE}");
             return None;
         }
@@ -72,7 +72,7 @@ impl Cache {
     }
 
     /// Writes via a temp file and rename, so a crash mid-write can't leave a torn entry.
-    pub fn store(&self, source: SourceId, fetched_at: DateTime<Utc>, reading: &Reading) {
+    pub fn store(&self, source: SourceId, fetched_at: Timestamp, reading: &Reading) {
         let path = self.path(source);
         let tmp = path.with_extension("json.tmp");
         let result = serde_json::to_vec(&EntryRef {
@@ -130,7 +130,7 @@ mod tests {
         let cache = Cache::open(&dir, &Config::default()).unwrap();
         assert!(cache.load(SourceId::Crypto).is_none());
 
-        let at = Utc::now();
+        let at = Timestamp::now();
         let reading = crypto();
         cache.store(SourceId::Crypto, at, &reading);
         let (loaded_at, loaded) = cache.load(SourceId::Crypto).unwrap();
@@ -148,9 +148,13 @@ mod tests {
         let before = Config::parse("[sector]\nlat = 37.77\nlon = -122.42").unwrap();
         let cache = Cache::open(&dir, &before).unwrap();
         let hn = Reading::Hn(Vec::new());
-        cache.store(SourceId::Crypto, Utc::now(), &crypto());
-        cache.store(SourceId::Quakes, Utc::now(), &Reading::Quakes(Vec::new()));
-        cache.store(SourceId::Hn, Utc::now(), &hn);
+        cache.store(SourceId::Crypto, Timestamp::now(), &crypto());
+        cache.store(
+            SourceId::Quakes,
+            Timestamp::now(),
+            &Reading::Quakes(Vec::new()),
+        );
+        cache.store(SourceId::Hn, Timestamp::now(), &hn);
 
         // Moving the sector orphans the quakes, but not crypto or HN.
         let moved = Config::parse("[sector]\nlat = 40.71\nlon = -74.01").unwrap();
@@ -169,13 +173,13 @@ mod tests {
     fn skips_entries_past_max_age_and_reads_old_formats() {
         let dir = temp_dir("age");
         let cache = Cache::open(&dir, &Config::default()).unwrap();
-        let stale = Utc::now() - MAX_AGE - TimeDelta::minutes(1);
+        let stale = Timestamp::now() - MAX_AGE - SignedDuration::from_mins(1);
         cache.store(SourceId::Crypto, stale, &crypto());
         assert!(cache.load(SourceId::Crypto).is_none());
 
         // An entry from before fingerprints still loads for a config-free source.
         let hn = serde_json::to_value(Reading::Hn(Vec::new())).unwrap();
-        let old = serde_json::json!({ "fetched_at": Utc::now(), "reading": hn });
+        let old = serde_json::json!({ "fetched_at": Timestamp::now(), "reading": hn });
         std::fs::write(cache.path(SourceId::Hn), old.to_string()).unwrap();
         assert!(cache.load(SourceId::Hn).is_some());
         std::fs::remove_dir_all(dir).unwrap();

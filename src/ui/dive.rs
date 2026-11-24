@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
-use chrono::{DateTime, Local, Timelike, Utc};
+use jiff::{Timestamp, tz::TimeZone};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -34,7 +34,7 @@ pub fn draw(
     area: Rect,
     app: &App,
     node: NodeId,
-    now: DateTime<Utc>,
+    now: Timestamp,
     instant: Instant,
     fx: &mut Fx,
 ) {
@@ -662,7 +662,7 @@ fn intercept_columns(area: Rect, n: usize) -> Vec<Rect> {
     split.iter().step_by(2).copied().collect()
 }
 
-fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: Timestamp) {
     let show_rss = app.sources.contains_key(&SourceId::Rss);
     let mut columns = intercept_columns(area, if show_rss { 3 } else { 2 }).into_iter();
     let kev_area = columns.next().unwrap_or_default();
@@ -674,9 +674,9 @@ fn intercepts(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     ];
     match app.readings.get(&SourceId::Kev) {
         Some(Reading::Kev(vulns)) => {
-            let today = now.with_timezone(&Local).date_naive();
+            let today = now.to_zoned_datetime(TimeZone::system()).date();
             for v in vulns {
-                let days = (today - v.added).num_days();
+                let days = (today - v.added).get_days();
                 let when = if days <= 0 {
                     "today".to_string()
                 } else {
@@ -802,12 +802,12 @@ fn scope_split(area: Rect) -> (Rect, Rect) {
 }
 
 fn sweep() -> f64 {
-    radar::sweep_at(Utc::now().timestamp_millis())
+    radar::sweep_at(Timestamp::now().as_millisecond())
 }
 
 /// Both feeds are low-density enough to share a dive: quakes get the bulk of the
 /// height (a radar scope needs room), space weather gets a compact strip below.
-fn seismic(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+fn seismic(frame: &mut Frame, area: Rect, app: &App, now: Timestamp) {
     let has_quakes = app.readings.contains_key(&SourceId::Quakes);
     let has_solar = app.readings.contains_key(&SourceId::Swpc);
     if has_quakes && has_solar {
@@ -832,7 +832,7 @@ fn seismic(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
     }
 }
 
-fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+fn quakes_detail(frame: &mut Frame, area: Rect, app: &App, now: Timestamp) {
     let Some(Reading::Quakes(quakes)) = app.readings.get(&SourceId::Quakes) else {
         return;
     };
@@ -1177,7 +1177,7 @@ fn altitude_color(altitude_m: Option<f64>) -> Color {
     }
 }
 
-fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
+fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: Timestamp) {
     let [left, _, right] = Layout::horizontal([
         Constraint::Percentage(42),
         Constraint::Length(2),
@@ -1255,7 +1255,7 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
         let readout = sun_readout(app, now);
         let [globe_header, globe_body] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(globe_area);
-        let drawn_at = globe::map_time(now);
+        let drawn_at = globe::map_time(now).to_zoned_datetime(TimeZone::UTC);
         frame.render_widget(
             Paragraph::new(header(format!(
                 "TERMINATOR // {:02}:{:02}Z",
@@ -1294,7 +1294,7 @@ fn netstatus(frame: &mut Frame, area: Rect, app: &App, now: DateTime<Utc>) {
 
 /// The sun as the sector sees it: how lit it is, how high the sun stands, and when it
 /// next rises or sets. Matches the map's five-minute steps, except the countdown.
-fn sun_readout(app: &App, now: DateTime<Utc>) -> Option<Line<'static>> {
+fn sun_readout(app: &App, now: Timestamp) -> Option<Line<'static>> {
     let (lat, lon) = app.config.sector.fix()?;
     let elevation = sun::elevation(lat, lon, globe::map_time(now));
     let light = Light::of(elevation);
@@ -1407,7 +1407,7 @@ mod tests {
         let alert = |level: &str| OutageAlert {
             datasource: "bgp".into(),
             level: level.into(),
-            time: Utc::now(),
+            time: Timestamp::now(),
         };
         assert_eq!(country_integrity(&[]), 100.0);
         assert_eq!(country_integrity(&[alert("warning")]), 85.0);

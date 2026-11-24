@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Deserialize;
 
 use super::http::{get_text, parse_json};
@@ -50,7 +50,7 @@ impl Feed for Ioda {
         let Some(country) = &self.country else {
             return Err(FetchError::NotConfigured("set [sector] country".into()));
         };
-        let until = Utc::now().timestamp();
+        let until = Timestamp::now().as_second();
         let from = until - WINDOW_HOURS * 3600;
         let url = format!(
             "{BASE}/outages/alerts?entityType=country&entityCode={country}&from={from}&until={until}"
@@ -85,7 +85,7 @@ pub fn parse(text: &str, country: &str) -> Result<CountryOutages, String> {
             Some(OutageAlert {
                 datasource: a.datasource,
                 level: a.level,
-                time: DateTime::from_timestamp(a.time, 0)?,
+                time: Timestamp::from_second(a.time).ok()?,
             })
         })
         .collect();

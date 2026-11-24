@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use chrono::NaiveDate;
+use jiff::civil::Date;
 use serde::Deserialize;
 
 use super::http::{get_text, parse_json};
@@ -45,7 +45,7 @@ struct Entry {
     vendor_project: String,
     product: String,
     vulnerability_name: Option<String>,
-    date_added: NaiveDate,
+    date_added: Date,
     known_ransomware_campaign_use: Option<String>,
 }
 
@@ -82,7 +82,7 @@ mod tests {
         assert_eq!(first.cve, "CVE-2026-7273");
         assert_eq!(first.vendor, "Zyxel");
         assert!(!first.name.is_empty());
-        assert_eq!(first.added, NaiveDate::from_ymd_opt(2026, 9, 21).unwrap());
+        assert_eq!(first.added, jiff::civil::date(2026, 9, 21));
         assert!(vulns.windows(2).all(|w| w[0].added >= w[1].added));
     }
 

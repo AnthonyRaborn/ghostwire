@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 use crate::config::Sector;
 use crate::geo;
@@ -26,7 +26,7 @@ pub fn detect(
     old: Option<&Reading>,
     new: &Reading,
     sector: &Sector,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Vec<String> {
     match new {
         Reading::Stocks(quotes) | Reading::Crypto(quotes) => {
@@ -45,7 +45,7 @@ pub fn detect(
                 .iter()
                 .filter(|q| !seen.contains(q.id.as_str()))
                 .filter(|q| q.mag >= QUAKE_MAG)
-                .filter(|q| (now - q.time).num_hours() < QUAKE_RECENT_HOURS)
+                .filter(|q| (now - q.time).as_hours() < QUAKE_RECENT_HOURS)
                 .filter_map(|q| {
                     let d = q.distance_km.filter(|d| *d <= sector.radius_km)?;
                     let bearing = q.bearing.map(geo::compass).unwrap_or("");
@@ -108,14 +108,14 @@ pub fn detect(
                 Some(Reading::Ioda(o)) => o
                     .alerts
                     .iter()
-                    .map(|a| (a.datasource.as_str(), a.time.timestamp()))
+                    .map(|a| (a.datasource.as_str(), a.time.as_second()))
                     .collect(),
                 _ => HashSet::new(),
             };
             outages
                 .alerts
                 .iter()
-                .filter(|a| !seen.contains(&(a.datasource.as_str(), a.time.timestamp())))
+                .filter(|a| !seen.contains(&(a.datasource.as_str(), a.time.as_second())))
                 .map(|a| {
                     format!(
                         "{} {} {}",
@@ -151,7 +151,7 @@ fn price_moves(old: &[Quote], new: &[Quote]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Duration;
+    use jiff::{SignedDuration, tz::TimeZone};
 
     use super::*;
     use crate::reading::{Quake, Satellite, Scales, SpaceWeather, Vuln};
@@ -170,7 +170,7 @@ mod tests {
             id: id.into(),
             mag,
             place: "x".into(),
-            time: Utc::now() - Duration::hours(age_hours),
+            time: Timestamp::now() - SignedDuration::from_hours(age_hours),
             depth_km: 5.0,
             distance_km: Some(distance_km),
             bearing: Some(45.0),
@@ -193,7 +193,7 @@ mod tests {
             vendor: "Acme".into(),
             product: "Router".into(),
             name: String::new(),
-            added: Utc::now().date_naive(),
+            added: Timestamp::now().to_zoned_datetime(TimeZone::UTC).date(),
             ransomware: false,
         }
     }
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn price_moves_fire_on_crossing_with_hysteresis() {
         let sector = Sector::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let calm = Reading::Crypto(vec![quote("BTC", 1.0)]);
         let jump = Reading::Crypto(vec![quote("BTC", 3.4)]);
         let dip = Reading::Crypto(vec![quote("BTC", -3.1)]);
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn only_new_recent_nearby_strong_quakes() {
         let sector = Sector::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let old = Reading::Quakes(vec![quake("seen", 5.0, 10.0, 0)]);
         let new = Reading::Quakes(vec![
             quake("seen", 5.0, 10.0, 0),
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn storms_fire_once_per_crossing() {
         let sector = Sector::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         assert_eq!(
             detect(None, &space(5.33), &sector, now),
             ["GEOMAGNETIC STORM Kp 5.3 G1"]
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn new_kev_entries_need_an_earlier_catalog() {
         let sector = Sector::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         let old = Reading::Kev(vec![vuln("CVE-1")]);
         let new = Reading::Kev(vec![vuln("CVE-2"), vuln("CVE-1")]);
         assert_eq!(
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn orbit_passes_fire_once_per_crossing() {
         let sector = Sector::default();
-        let now = Utc::now();
+        let now = Timestamp::now();
         assert_eq!(
             detect(None, &orbit(15.0), &sector, now),
             ["ISS PASS 15° NE"]

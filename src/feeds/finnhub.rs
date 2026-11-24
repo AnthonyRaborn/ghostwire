@@ -7,10 +7,10 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, NaiveTime, TimeZone, Utc, Weekday};
-use chrono_tz::America::New_York;
-use chrono_tz::Tz;
 use futures_util::future::join_all;
+use jiff::civil::{self, Time, Weekday};
+use jiff::tz::{self, TimeZone};
+use jiff::{Timestamp, ToSpan, ZonedDateTime};
 use serde::Deserialize;
 
 use super::http::{get_text_keyed, parse_json};
@@ -84,7 +84,7 @@ impl Feed for Finnhub {
     }
 
     fn interval(&self) -> Duration {
-        poll_interval(Utc::now())
+        poll_interval(Timestamp::now())
     }
 
     fn offline(&self) -> Option<String> {
@@ -165,45 +165,45 @@ pub fn parse(text: &str) -> Result<Option<RawQuote>, String> {
     Ok((quote.t != 0 || quote.c != 0.0).then_some(quote))
 }
 
+/// The exchange's zone, embedded at build time so market hours don't depend on the
+/// system having a time zone database.
+static NEW_YORK: TimeZone = tz::get!("America/New_York");
+
+const OPEN_TIME: Time = civil::time(9, 30, 0, 0);
+const CLOSE_TIME: Time = civil::time(16, 0, 0, 0);
+
 fn is_trading_day(day: Weekday) -> bool {
-    !matches!(day, Weekday::Sat | Weekday::Sun)
-}
-
-fn open_time() -> NaiveTime {
-    NaiveTime::from_hms_opt(9, 30, 0).expect("valid time")
-}
-
-fn close_time() -> NaiveTime {
-    NaiveTime::from_hms_opt(16, 0, 0).expect("valid time")
+    !matches!(day, Weekday::Saturday | Weekday::Sunday)
 }
 
 /// Regular NYSE hours. Exchange holidays aren't modeled; they just poll a little often.
-fn is_open(et: DateTime<Tz>) -> bool {
-    is_trading_day(et.weekday()) && (open_time()..close_time()).contains(&et.time())
+fn is_open(et: &ZonedDateTime) -> bool {
+    is_trading_day(et.weekday()) && (OPEN_TIME..CLOSE_TIME).contains(&et.time())
 }
 
-fn next_open(et: DateTime<Tz>) -> Option<DateTime<Tz>> {
+fn next_open(et: &ZonedDateTime) -> Option<ZonedDateTime> {
     (0..8).find_map(|days| {
-        let date = et.date_naive().checked_add_days(chrono::Days::new(days))?;
+        let date = et.date().checked_add(days.days()).ok()?;
         if !is_trading_day(date.weekday()) {
             return None;
         }
-        let open = New_York
-            .from_local_datetime(&date.and_time(open_time()))
-            .single()?;
-        (open > et).then_some(open)
+        let open = date
+            .to_datetime(OPEN_TIME)
+            .to_zoned_datetime(NEW_YORK.clone())
+            .ok()?;
+        (open > *et).then_some(open)
     })
 }
 
 /// Every minute while the market is open; otherwise every 15 minutes, or sooner if the
 /// open is closer than that.
-fn poll_interval(now: DateTime<Utc>) -> Duration {
-    let et = now.with_timezone(&New_York);
-    if is_open(et) {
+fn poll_interval(now: Timestamp) -> Duration {
+    let et = now.to_zoned_datetime(NEW_YORK.clone());
+    if is_open(&et) {
         return OPEN_POLL;
     }
-    next_open(et)
-        .and_then(|open| (open.with_timezone(&Utc) - now).to_std().ok())
+    next_open(&et)
+        .and_then(|open| Duration::try_from(open.timestamp() - now).ok())
         .unwrap_or(CLOSED_POLL)
         .clamp(OPEN_POLL, CLOSED_POLL)
 }
@@ -215,7 +215,7 @@ mod tests {
     const QUOTE: &str = include_str!("../../tests/fixtures/finnhub_quote.json");
     const UNKNOWN: &str = include_str!("../../tests/fixtures/finnhub_unknown.json");
 
-    fn utc(s: &str) -> DateTime<Utc> {
+    fn utc(s: &str) -> Timestamp {
         s.parse().unwrap()
     }
 

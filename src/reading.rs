@@ -1,6 +1,6 @@
 //! What each source delivers. These are also what the disk cache stores.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use jiff::{Timestamp, civil::Date};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Units;
@@ -76,7 +76,7 @@ pub struct Story {
     pub title: String,
     pub score: u32,
     pub comments: u32,
-    pub posted: DateTime<Utc>,
+    pub posted: Timestamp,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ pub struct Vuln {
     /// CISA's name for it, e.g. "Zyxel GS1900 Series Switches Stack-Based Buffer Overflow".
     #[serde(default)]
     pub name: String,
-    pub added: NaiveDate,
+    pub added: Date,
     pub ransomware: bool,
 }
 
@@ -96,7 +96,7 @@ pub struct Quake {
     pub id: String,
     pub mag: f64,
     pub place: String,
-    pub time: DateTime<Utc>,
+    pub time: Timestamp,
     pub depth_km: f64,
     /// Distance and bearing from the sector, when a location is configured.
     pub distance_km: Option<f64>,
@@ -128,7 +128,7 @@ pub struct Headline {
     /// The feed's own title, e.g. "The Verge".
     pub source: String,
     pub link: Option<String>,
-    pub published: Option<DateTime<Utc>>,
+    pub published: Option<Timestamp>,
 }
 
 /// IODA's recent outage signal for the configured sector's country.
@@ -146,7 +146,7 @@ pub struct OutageAlert {
     pub datasource: String,
     /// IODA's own severity word for the alert, e.g. "warning", "critical".
     pub level: String,
-    pub time: DateTime<Utc>,
+    pub time: Timestamp,
 }
 
 /// The rig's own link, measured by timing a request to Cloudflare's edge.
