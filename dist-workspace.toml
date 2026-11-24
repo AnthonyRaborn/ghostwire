@@ -15,3 +15,7 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+
+[dist.github-custom-runners]
+# GitHub cancels jobs on the macos-14 image, the default runner for this target.
+aarch64-apple-darwin = "macos-15"
