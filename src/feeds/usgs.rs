@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use jiff::{SignedDuration, Timestamp};
 use serde::Deserialize;
 
 use super::http::{get_text, parse_json};
@@ -56,7 +56,8 @@ impl Feed for Usgs {
             let quakes = parse(&global.await?, None).map_err(FetchError::Failed)?;
             return Ok(Reading::Quakes(quakes));
         };
-        let since = (Utc::now() - chrono::Duration::days(NEARBY_DAYS)).format("%Y-%m-%dT%H:%M");
+        let since = (Timestamp::now() - SignedDuration::from_hours(24 * NEARBY_DAYS))
+            .strftime("%Y-%m-%dT%H:%M");
         let nearby_url = format!(
             "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson\
              &latitude={lat:.4}&longitude={lon:.4}&maxradiuskm={:.0}\
@@ -128,7 +129,7 @@ pub fn parse(text: &str, fix: Option<(f64, f64)>) -> Result<Vec<Quake>, String> 
                     .properties
                     .place
                     .unwrap_or_else(|| "unknown location".into()),
-                time: DateTime::from_timestamp_millis(f.properties.time)?,
+                time: Timestamp::from_millisecond(f.properties.time).ok()?,
                 depth_km: depth,
                 distance_km,
                 bearing,

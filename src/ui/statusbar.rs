@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use chrono::Local;
+use jiff::ZonedDateTime;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -57,7 +57,7 @@ pub fn draw_top(frame: &mut Frame, area: Rect, app: &App) {
         ));
     }
     let clock = Span::styled(
-        Local::now().format("%H:%M:%S NET ").to_string(),
+        ZonedDateTime::now().strftime("%H:%M:%S NET ").to_string(),
         Style::new().fg(theme::CYAN),
     );
     frame.render_widget(

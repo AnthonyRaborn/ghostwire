@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 /// A panel on screen. Each node shows the combined readings of one or more sources.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -142,7 +142,7 @@ pub struct SourceState {
     pub link: Link,
     pub in_flight: bool,
     pub failures: u32,
-    pub last_ok: Option<DateTime<Utc>>,
+    pub last_ok: Option<Timestamp>,
     pub next_attempt: Option<Instant>,
     pub last_error: Option<String>,
     /// The normal refresh interval, used to judge staleness.
@@ -163,9 +163,9 @@ impl SourceState {
     }
 
     /// 0.0 while fresh, rising to 1.0 as the data ages past several refresh intervals.
-    pub fn decay(&self, now: DateTime<Utc>) -> f32 {
+    pub fn decay(&self, now: Timestamp) -> f32 {
         let Some(last) = self.last_ok else { return 0.0 };
-        let age = (now - last).to_std().unwrap_or_default().as_secs_f32();
+        let age = (now - last).as_secs_f32().max(0.0);
         let intervals = age / self.interval.as_secs_f32().max(1.0);
         ((intervals - DECAY_START) / (DECAY_FULL - DECAY_START)).clamp(0.0, 1.0)
     }
@@ -188,6 +188,8 @@ pub fn best_link<'a>(states: impl IntoIterator<Item = &'a SourceState>) -> Optio
 
 #[cfg(test)]
 mod tests {
+    use jiff::SignedDuration;
+
     use super::*;
 
     fn with_link(link: Link) -> SourceState {
@@ -222,15 +224,15 @@ mod tests {
 
     #[test]
     fn decay_ramps_with_age() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let mut state = SourceState::new(Duration::from_secs(60));
         assert_eq!(state.decay(now), 0.0);
-        state.last_ok = Some(now - chrono::Duration::seconds(60));
+        state.last_ok = Some(now - SignedDuration::from_secs(60));
         assert_eq!(state.decay(now), 0.0);
-        state.last_ok = Some(now - chrono::Duration::seconds(60 * 4));
+        state.last_ok = Some(now - SignedDuration::from_secs(60 * 4));
         let mid = state.decay(now);
         assert!(mid > 0.0 && mid < 1.0);
-        state.last_ok = Some(now - chrono::Duration::seconds(60 * 10));
+        state.last_ok = Some(now - SignedDuration::from_secs(60 * 10));
         assert_eq!(state.decay(now), 1.0);
     }
 }

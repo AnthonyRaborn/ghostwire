@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use ratatui::buffer::Buffer;
 
-use chrono::{DateTime, Utc};
+use jiff::{Timestamp, tz::TimeZone};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -28,7 +28,7 @@ pub fn draw(
     area: Rect,
     app: &App,
     node: NodeId,
-    now: DateTime<Utc>,
+    now: Timestamp,
     instant: Instant,
     fx: &mut Fx,
 ) {
@@ -76,7 +76,7 @@ pub(super) fn status(
     app: &App,
     node: NodeId,
     link: Option<&Link>,
-    now: DateTime<Utc>,
+    now: Timestamp,
 ) -> Line<'static> {
     let Some(link) = link else {
         return Line::default();
@@ -96,7 +96,7 @@ pub(super) fn status(
     Line::styled(text, Style::new().fg(theme::link_color(link)))
 }
 
-fn body(app: &App, node: NodeId, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
+fn body(app: &App, node: NodeId, width: usize, now: Timestamp) -> Vec<Line<'static>> {
     let tracked: Vec<SourceId> = app.node_sources(node).map(|(id, _)| id).collect();
     if tracked.is_empty() {
         return vec![Line::styled(lexicon::NOT_WIRED, style(theme::MUTED))];
@@ -259,7 +259,7 @@ pub(super) fn aqi_color(aqi: f64) -> Color {
 /// Per source, so three sources sharing one small tile don't crowd each other out.
 const MAX_INTERCEPT_LINES: usize = 3;
 
-fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
+fn intercepts(app: &App, width: usize, now: Timestamp) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     if app.sources.contains_key(&SourceId::Kev) {
         match app.readings.get(&SourceId::Kev) {
@@ -267,7 +267,7 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
                 for v in vulns.iter().take(MAX_INTERCEPT_LINES) {
                     // CISA dates entries by US calendar day, so compare local dates.
                     let days =
-                        (now.with_timezone(&chrono::Local).date_naive() - v.added).num_days();
+                        (now.to_zoned_datetime(TimeZone::system()).date() - v.added).get_days();
                     let mut right = Vec::new();
                     if v.ransomware {
                         right.push(Span::styled("RANSOM ", style(theme::RED)));
@@ -319,7 +319,7 @@ fn intercepts(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>>
 /// single summary line pinned to the bottom.
 const MAX_QUAKE_LINES: usize = 4;
 
-fn seismic(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
+fn seismic(app: &App, width: usize, now: Timestamp) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     if app.sources.contains_key(&SourceId::Quakes) {
         match app.readings.get(&SourceId::Quakes) {
@@ -342,7 +342,7 @@ fn quake_lines(
     app: &App,
     quakes: &[Quake],
     width: usize,
-    now: DateTime<Utc>,
+    now: Timestamp,
     max: usize,
 ) -> Vec<Line<'static>> {
     let radius = app.config.sector.radius_km;
@@ -493,7 +493,7 @@ pub(super) fn kp_color(kp: f64) -> Color {
     }
 }
 
-fn netstatus(app: &App, width: usize, now: DateTime<Utc>) -> Vec<Line<'static>> {
+fn netstatus(app: &App, width: usize, now: Timestamp) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     if app.sources.contains_key(&SourceId::Uplink) {
         match app.readings.get(&SourceId::Uplink) {

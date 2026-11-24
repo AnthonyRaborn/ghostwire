@@ -9,6 +9,7 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use futures_util::future::join_all;
+use jiff::Timestamp;
 
 use super::http::get_text;
 use super::{Feed, FetchError};
@@ -105,7 +106,10 @@ pub fn parse_feed(text: &str) -> Result<Vec<Headline>, String> {
                 title: e.title?.content,
                 source: source.clone(),
                 link: e.links.first().map(|l| l.href.clone()),
-                published: e.published.or(e.updated),
+                published: e
+                    .published
+                    .or(e.updated)
+                    .and_then(|t| Timestamp::from_millisecond(t.timestamp_millis()).ok()),
             })
         })
         .collect())
@@ -113,6 +117,8 @@ pub fn parse_feed(text: &str) -> Result<Vec<Headline>, String> {
 
 #[cfg(test)]
 mod tests {
+    use jiff::SignedDuration;
+
     use super::*;
 
     const RSS2: &str = include_str!("../../tests/fixtures/rss_feed.xml");
@@ -149,14 +155,14 @@ mod tests {
     }
 
     fn headlines(source: &str, hours_ago: &[i64]) -> Vec<Headline> {
-        let now = chrono::Utc::now();
+        let now = Timestamp::now();
         hours_ago
             .iter()
             .map(|h| Headline {
                 title: format!("{source} {h}h"),
                 source: source.into(),
                 link: None,
-                published: Some(now - chrono::Duration::hours(*h)),
+                published: Some(now - SignedDuration::from_hours(*h)),
             })
             .collect()
     }

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Local, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use jiff::Timestamp;
 use tokio::sync::broadcast;
 
 use crate::cache::Cache;
@@ -198,7 +198,7 @@ impl App {
         state.next_attempt = retry_in.map(|wait| Instant::now() + wait);
         match result {
             Ok(reading) => {
-                let now = Utc::now();
+                let now = Timestamp::now();
                 state.link = Link::Live;
                 state.last_ok = Some(now);
                 state.last_error = None;
@@ -282,8 +282,8 @@ impl App {
             return BUSY_FRAME;
         }
         // Otherwise wake just after the next wall-clock second so the clock ticks cleanly.
-        let ms = Local::now().timestamp_subsec_millis().min(999);
-        Duration::from_millis(u64::from(1_000 - ms) + 5)
+        let ms = Timestamp::now().subsec_millisecond().clamp(0, 999);
+        Duration::from_millis((1_005 - ms) as u64)
     }
 
     pub fn node_sources(&self, node: NodeId) -> impl Iterator<Item = (SourceId, &SourceState)> {
@@ -315,12 +315,12 @@ impl App {
     }
 
     /// The most recent successful fetch across the node's sources.
-    pub fn node_last_ok(&self, node: NodeId) -> Option<DateTime<Utc>> {
+    pub fn node_last_ok(&self, node: NodeId) -> Option<Timestamp> {
         self.node_sources(node).filter_map(|(_, s)| s.last_ok).max()
     }
 
     /// The freshest source's decay, so a node only dims once all of it is stale.
-    pub fn node_decay(&self, node: NodeId, now: DateTime<Utc>) -> f32 {
+    pub fn node_decay(&self, node: NodeId, now: Timestamp) -> f32 {
         self.node_sources(node)
             .filter(|(_, s)| s.last_ok.is_some())
             .map(|(_, s)| s.decay(now))

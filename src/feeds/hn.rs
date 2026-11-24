@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use chrono::DateTime;
 use futures_util::future::join_all;
+use jiff::Timestamp;
 use serde::Deserialize;
 
 use super::http::{get_text, parse_json};
@@ -74,7 +74,7 @@ pub fn parse_item(text: &str) -> Result<Option<Story>, String> {
     if item.dead || item.deleted {
         return Ok(None);
     }
-    let (Some(title), Some(posted)) = (item.title, DateTime::from_timestamp(item.time, 0)) else {
+    let (Some(title), Some(posted)) = (item.title, Timestamp::from_second(item.time).ok()) else {
         return Ok(None);
     };
     Ok(Some(Story {

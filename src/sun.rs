@@ -5,25 +5,22 @@
 
 use std::f64::consts::TAU;
 
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
+use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 
 /// The sun's center sits this far below the horizon at sunrise and sunset, once
 /// refraction and the disc's radius are allowed for.
 const HORIZON_DEG: f64 = -0.833;
 /// How far ahead to look for the next sunrise or sunset, and how finely.
-const SEARCH: Duration = Duration::hours(24);
-const SEARCH_STEP: Duration = Duration::minutes(2);
+const SEARCH: SignedDuration = SignedDuration::from_hours(24);
+const SEARCH_STEP: SignedDuration = SignedDuration::from_mins(2);
 
 /// The point directly under the sun, `(lat, lon)` in degrees.
-pub fn subsolar(t: DateTime<Utc>) -> (f64, f64) {
+pub fn subsolar(t: Timestamp) -> (f64, f64) {
+    let t = t.to_zoned_datetime(TimeZone::UTC);
     let hours =
         f64::from(t.hour()) + f64::from(t.minute()) / 60.0 + f64::from(t.second()) / 3_600.0;
-    let days_in_year = if t.date_naive().leap_year() {
-        366.0
-    } else {
-        365.0
-    };
-    let g = TAU / days_in_year * (f64::from(t.ordinal()) - 1.0 + (hours - 12.0) / 24.0);
+    let days_in_year = if t.in_leap_year() { 366.0 } else { 365.0 };
+    let g = TAU / days_in_year * (f64::from(t.day_of_year()) - 1.0 + (hours - 12.0) / 24.0);
     let decl = 0.006918 - 0.399912 * g.cos() + 0.070257 * g.sin() - 0.006758 * (2.0 * g).cos()
         + 0.000907 * (2.0 * g).sin()
         - 0.002697 * (3.0 * g).cos()
@@ -49,7 +46,7 @@ pub fn elevation_at(lat: f64, lon: f64, subsolar: (f64, f64)) -> f64 {
     cos_zenith.clamp(-1.0, 1.0).asin().to_degrees()
 }
 
-pub fn elevation(lat: f64, lon: f64, t: DateTime<Utc>) -> f64 {
+pub fn elevation(lat: f64, lon: f64, t: Timestamp) -> f64 {
     elevation_at(lat, lon, subsolar(t))
 }
 
@@ -80,15 +77,15 @@ impl Light {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    Rise(DateTime<Utc>),
-    Set(DateTime<Utc>),
+    Rise(Timestamp),
+    Set(Timestamp),
     /// No sunrise or sunset in the next day: polar day or polar night.
     StaysUp,
     StaysDown,
 }
 
 /// The next sunrise or sunset at `(lat, lon)` after `t`, to within a few seconds.
-pub fn next_event(lat: f64, lon: f64, t: DateTime<Utc>) -> Event {
+pub fn next_event(lat: f64, lon: f64, t: Timestamp) -> Event {
     let up = |at| elevation(lat, lon, at) > HORIZON_DEG;
     let was_up = up(t);
     let mut prev = t;
@@ -97,7 +94,7 @@ pub fn next_event(lat: f64, lon: f64, t: DateTime<Utc>) -> Event {
         if up(next) != was_up {
             // Narrow the crossing down from two minutes to a few seconds.
             let (mut lo, mut hi) = (prev, next);
-            while hi - lo > Duration::seconds(5) {
+            while hi - lo > SignedDuration::from_secs(5) {
                 let mid = lo + (hi - lo) / 2;
                 if up(mid) == was_up {
                     lo = mid;
@@ -122,16 +119,20 @@ pub fn next_event(lat: f64, lon: f64, t: DateTime<Utc>) -> Event {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use jiff::civil;
 
     use super::*;
 
-    fn utc(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
-        Utc.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    fn utc(y: i16, mo: i8, d: i8, h: i8, mi: i8) -> Timestamp {
+        civil::date(y, mo, d)
+            .at(h, mi, 0, 0)
+            .to_zoned_datetime(TimeZone::UTC)
+            .unwrap()
+            .timestamp()
     }
 
-    fn minutes_apart(a: DateTime<Utc>, b: DateTime<Utc>) -> i64 {
-        (a - b).num_minutes().abs()
+    fn minutes_apart(a: Timestamp, b: Timestamp) -> i64 {
+        (a - b).as_mins().abs()
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Small text-shaping helpers shared by every node.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use ratatui::text::{Line, Span};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -83,8 +83,8 @@ pub fn distance(km: f64, units: Units) -> String {
 }
 
 /// Compact age: `42s`, `7m`, `3h`, `2d`.
-pub fn ago(t: DateTime<Utc>, now: DateTime<Utc>) -> String {
-    let secs = (now - t).num_seconds().max(0);
+pub fn ago(t: Timestamp, now: Timestamp) -> String {
+    let secs = (now - t).as_secs().max(0);
     match secs {
         s if s < 60 => format!("{s}s"),
         s if s < 3_600 => format!("{}m", s / 60),
@@ -190,11 +190,13 @@ pub fn row(mut left: Vec<Span<'static>>, right: Vec<Span<'static>>, width: usize
 }
 
 pub fn spinner() -> char {
-    SPINNER[(Utc::now().timestamp_millis() / 100).rem_euclid(10) as usize]
+    SPINNER[(Timestamp::now().as_millisecond() / 100).rem_euclid(10) as usize]
 }
 
 #[cfg(test)]
 mod tests {
+    use jiff::SignedDuration;
+
     use super::*;
 
     #[test]
@@ -229,12 +231,12 @@ mod tests {
 
     #[test]
     fn ages() {
-        let now = Utc::now();
-        assert_eq!(ago(now - chrono::Duration::seconds(42), now), "42s");
-        assert_eq!(ago(now - chrono::Duration::minutes(7), now), "7m");
-        assert_eq!(ago(now - chrono::Duration::hours(3), now), "3h");
-        assert_eq!(ago(now - chrono::Duration::days(2), now), "2d");
-        assert_eq!(ago(now + chrono::Duration::seconds(5), now), "0s");
+        let now = Timestamp::now();
+        assert_eq!(ago(now - SignedDuration::from_secs(42), now), "42s");
+        assert_eq!(ago(now - SignedDuration::from_mins(7), now), "7m");
+        assert_eq!(ago(now - SignedDuration::from_hours(3), now), "3h");
+        assert_eq!(ago(now - SignedDuration::from_hours(48), now), "2d");
+        assert_eq!(ago(now + SignedDuration::from_secs(5), now), "0s");
     }
 
     #[test]

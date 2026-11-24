@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Dates and times now use jiff instead of chrono and chrono-tz, both of which were
+  declared unmaintained (RUSTSEC-2026-0543 and -0555). Caches and readings keep the
+  same on-disk format, and the market-hours zone is still built into the binary.
+  chrono remains only as a dependency of feed-rs, and the audit ignores just that
+  advisory until feed-rs moves off it.
+
 ### Security
 
 - Updated url to 2.5.9 for RUSTSEC-2026-0592: `Url::origin()` on a deeply nested
