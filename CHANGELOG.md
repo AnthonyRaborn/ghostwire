@@ -6,20 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- Dates and times now use jiff instead of chrono and chrono-tz, both of which were
-  declared unmaintained (RUSTSEC-2026-0543 and -0555). Caches and readings keep the
-  same on-disk format, and the market-hours zone is still built into the binary.
-  chrono remains only as a dependency of feed-rs, and the audit ignores just that
-  advisory until feed-rs moves off it.
-
-### Security
-
-- Updated url to 2.5.9 for RUSTSEC-2026-0592: `Url::origin()` on a deeply nested
-  `blob:` URL overflowed the stack and aborted the process. Feed and API URLs go
-  through url via reqwest and feed-rs.
-
 ## [1.1.0] — DAYBREAK
 
 ### Added
@@ -44,8 +30,8 @@ All notable changes to this project are documented here. The format follows
 - CI runs the real binary end to end (`tools/smoke.sh`: `--demo` in a tmux pane driven
   by keys, plus `--check-config`), and a new weekly Audit workflow checks
   `Cargo.lock` against the RustSec advisory database.
-- Updated feed-rs to 3.0, along with libc, serde_json, and the toml crates; CI moves
-  to actions/checkout v7.
+- Updated feed-rs to 3.0, along with libc, serde_json, unicode-width, and the toml
+  crates; CI moves to actions/checkout v7.
 - The terminator map draws in half-block cells for twice the vertical resolution, with
   real coastlines (from Natural Earth) instead of rough boxes, graded twilight bands
   instead of a hard day/night edge, and the point under the sun marked. The sun's
@@ -57,6 +43,11 @@ All notable changes to this project are documented here. The format follows
 - Sources in the same trouble for the same reason share one ticker entry (e.g.
   `9 LINKS: ICE — Connection refused, retry 5s`), and entries that don't fit drop off
   whole behind a `+N more` count instead of running off the edge mid-word.
+- Dates and times now use jiff instead of chrono and chrono-tz, both of which were
+  declared unmaintained (RUSTSEC-2026-0543 and -0555). Caches and readings keep the
+  same on-disk format, and the market-hours zone is still built into the binary.
+  chrono remains only as a dependency of feed-rs, and the audit ignores just that
+  advisory until feed-rs moves off it.
 
 ### Security
 
@@ -64,6 +55,9 @@ All notable changes to this project are documented here. The format follows
   1.0.11 for RUSTSEC-2026-0346, -0347, -0348, -0349, -0382, and -0383 (TLS secrets in
   `Debug` output, a key-exchange downgrade, distrusted intermediates, and more), and
   tokio to 1.54.1 for RUSTSEC-2026-0386. Every feed's HTTPS goes through rustls.
+- Updated url to 2.5.9 for RUSTSEC-2026-0592: `Url::origin()` on a deeply nested
+  `blob:` URL overflowed the stack and aborted the process. Feed and API URLs go
+  through url via reqwest and feed-rs.
 
 ### Fixed
 
